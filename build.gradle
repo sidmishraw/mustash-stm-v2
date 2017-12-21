@@ -34,5 +34,11 @@ dependencies {
     
     // adding in lombok for boilerplate reduction
     compile group: 'org.projectlombok', name: 'lombok', version: '1.16.18'
+    
+    // for deep cloning of java objects
+    compile group: 'uk.com.robust-it', name: 'cloning', version: '1.9.9'
+    
+    // for JSON
+ 	compile group: 'com.google.code.gson',name: 'gson', version: '2.8.2'
 }
 

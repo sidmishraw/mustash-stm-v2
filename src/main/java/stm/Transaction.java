@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rits.cloning.Cloner;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -132,6 +134,9 @@ public final class Transaction implements Runnable {
             }
             break;
         }
+        // # debugging -- checking state of memory cells
+        // this.stm.printState();
+        // # debugging -- checking state of memory cells
         logger.debug("Transaction: " + Thread.currentThread().getName() + " has finished execution.");
         this.version = this.version + 1; // increment the version
         this.isComplete = true; // the transaction is done executing
@@ -153,7 +158,11 @@ public final class Transaction implements Runnable {
     // # Transactional Operation related
     
     /**
-     * Reads the contents of the memory cell.
+     * Reads the contents of the memory cell. It returns a deep clone or copy of the
+     * original contents so that there is no accidental modification by the consumer before the commit phase.
+     * 
+     * <p>
+     * <blockquote> <strong> Note: The clone or copy is a deep copy of the contents. </strong> </blockquote>
      * 
      * @param memCell
      *            the memory cell to read contents from
@@ -168,13 +177,15 @@ public final class Transaction implements Runnable {
         // and subsequent reads for the transaction will all come from the quarantined
         // memory cell.
         if (Objects.isNull(this.readQuarantine.get(memCell))) {
-            // read directly from the memory cell and store in the quarantine
+            // read directly from the memory cell and store in the read-quarantine
             data = memCell.read();
             this.readQuarantine.put((MemoryCell<Object>) memCell, data);
         } else {
-            // read from the quarantine
+            // read from the read-quarantine
             data = (T) this.readQuarantine.get(memCell);
         }
+        Cloner clone = new Cloner(); // Java deep cloner
+        data = clone.deepClone(data); // data is a deep-copy/clone of the contents of the memCell
         return data;
     }
     
@@ -204,6 +215,7 @@ public final class Transaction implements Runnable {
      * @return the result of the execution.
      */
     private boolean executeActions() {
+        // logger.info("Executing Actions");
         List<Boolean> stats = new ArrayList<>();
         this.actions.forEach(act -> {
             stats.add(act.get());
@@ -234,6 +246,7 @@ public final class Transaction implements Runnable {
             logger.info(Thread.currentThread().getName() + " begins its commit phase");
             // Setup step: Acquire the commit lock on the STM. This lock helps to ensure ATOMICITY and ISOLATION.
             this.stm.getCommitLock().lock();
+            // logger.error("HARMLESS: Lock acquired!");
             // -- First, the transaction will take ownership of all its write quarantined members.
             // This prevents other transactions from viewing an inconsistent state.
             if (this.writeQuarantine.entrySet().stream().map((e) -> {
@@ -252,7 +265,12 @@ public final class Transaction implements Runnable {
                 this.releaseOwnerships();
                 return false;
             }
-            
+            // # for debugging only
+            // logger.debug("Ownerships = " + this.writeQuarantine.entrySet().stream().map(e -> {
+            // logger.error("Current owner = " + this.stm.getOwner(e.getKey()));
+            // return this.stm.isOwner(e.getKey(), this);
+            // }).filter(s -> s).count());
+            // # for debugging only
             // -- Second, that the transaction has taken ownership of its write quarantined members
             // it needs to validate its read quarantined values.
             logger.info(Thread.currentThread().getName()
@@ -279,6 +297,7 @@ public final class Transaction implements Runnable {
             this.writeQuarantine.entrySet().forEach(e -> {
                 MemoryCell<Object> memCell = e.getKey();
                 Object val = e.getValue();
+                // logger.info("WRITING -- " + new Gson().toJson(val)); // debugging value being written
                 memCell.write(val);
             });
             logger.info(Thread.currentThread().getName() + " ends its commit phase");

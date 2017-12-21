@@ -12,6 +12,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import com.google.gson.Gson;
+
 import stm.annotations.ReadLocking;
 import stm.annotations.WriteLocking;
 
@@ -50,11 +52,11 @@ public class MemoryCell<T> {
     }
     
     /**
-     * @InternalUsage
-     *                
-     *                Reads the data in the memory cell, only visible inside the stm package
+     * Reads the data in the memory cell, only visible inside the stm package.
      * 
-     * @return the data contained in the memory cell
+     * @InternalUsage
+     * 
+     * @return the copy of the data contained in the memory cell.
      */
     @ReadLocking
     T read() {
@@ -69,9 +71,9 @@ public class MemoryCell<T> {
     }
     
     /**
+     * Writes the data into the memory cell.
+     * 
      * @InternalUsage
-     *                
-     *                Writes the data into the memory cell.
      * 
      * @param newData
      *            the new data to be written into the memory cell
@@ -136,8 +138,6 @@ public class MemoryCell<T> {
      */
     @Override
     public String toString() {
-        return "MemoryCell [" + (this.ID != null ? "ID=" + this.ID + ", " : "")
-                + (this.data != null ? "data=" + this.data : "") + "]";
+        return new Gson().toJson(this);
     }
-    
 }

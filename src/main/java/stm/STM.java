@@ -246,4 +246,19 @@ public class STM {
     }
     
     // # transaction execution strategies
+    
+    /**
+     * Prints the state of all the memory cells of the STM.
+     * To be used for debugging only.
+     * 
+     * @InternalUsage
+     */
+    void printState() {
+        StringBuffer buffer = new StringBuffer();
+        buffer.append("HARMLESS :: LOGGING STATE :: ");
+        this.memory.forEach(m -> {
+            buffer.append(m.toString()).append("  ");
+        });
+        logger.debug(buffer.toString());
+    }
 }
