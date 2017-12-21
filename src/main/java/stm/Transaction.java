@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -247,32 +246,7 @@ public final class Transaction implements Runnable {
             // Setup step: Acquire the commit lock on the STM. This lock helps to ensure ATOMICITY and ISOLATION.
             this.stm.getCommitLock().lock();
             // logger.error("HARMLESS: Lock acquired!");
-            // -- First, the transaction will take ownership of all its write quarantined members.
-            // This prevents other transactions from viewing an inconsistent state.
-            if (this.writeQuarantine.entrySet().stream().map((e) -> {
-                MemoryCell<Object> memCell = e.getKey();
-                Optional<Transaction> currentOwner = this.stm.getOwner(memCell);
-                if (currentOwner.isPresent() && !currentOwner.get().equals(this)) {
-                    // cannot take ownership since the memory cell is already owned by some other transaction
-                    return false;
-                }
-                // the memCell is ready to be owned
-                this.stm.takeOwnership(memCell, this);
-                return true;
-            }).filter(s -> !s).count() > 0) {
-                // failed to take ownership of atleast 1 write set member
-                logger.info("FAILED:: " + Thread.currentThread().getName() + " couldn't take ownerships");
-                this.releaseOwnerships();
-                return false;
-            }
-            // # for debugging only
-            // logger.debug("Ownerships = " + this.writeQuarantine.entrySet().stream().map(e -> {
-            // logger.error("Current owner = " + this.stm.getOwner(e.getKey()));
-            // return this.stm.isOwner(e.getKey(), this);
-            // }).filter(s -> s).count());
-            // # for debugging only
-            // -- Second, that the transaction has taken ownership of its write quarantined members
-            // it needs to validate its read quarantined values.
+            // -- First, the transaction needs to validate its read quarantined values.
             logger.info(Thread.currentThread().getName()
                     + " begins validating its read quarantined values in the commit phase");
             if (this.readQuarantine.entrySet().stream().map(e -> {
@@ -289,10 +263,9 @@ public final class Transaction implements Runnable {
                 // Need to release all the ownerships and fail the commit phase so that the transaction can
                 // restart from the beginning.
                 logger.info("FAILED:: " + Thread.currentThread().getName() + " read inconsistent");
-                this.releaseOwnerships();
-                return false;
+                return false; // failed commit
             }
-            // -- Third, after the read set members have been validated, the transaction is ready to flush
+            // -- Second, after the read set members have been validated, the transaction is ready to flush
             // its write-quarantined values. Then, it must release ownerships of all the write set members.
             this.writeQuarantine.entrySet().forEach(e -> {
                 MemoryCell<Object> memCell = e.getKey();
@@ -301,23 +274,10 @@ public final class Transaction implements Runnable {
                 memCell.write(val);
             });
             logger.info(Thread.currentThread().getName() + " ends its commit phase");
-            this.releaseOwnerships();
             return true; // commit was successful
         } finally {
             // Release the commit lock on the STM
             this.stm.getCommitLock().unlock();
         }
-    }
-    
-    /**
-     * Releases the ownerships of all the write set members.
-     */
-    private void releaseOwnerships() {
-        this.writeQuarantine.entrySet().forEach(e -> {
-            if (this.stm.isOwner(e.getKey(), this)) {
-                // release ownership iff the transaction is the owner
-                this.stm.releaseOwnership(e.getKey());
-            }
-        });
     }
 }
