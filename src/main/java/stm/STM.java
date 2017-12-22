@@ -17,6 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 
 /**
@@ -31,20 +32,22 @@ import lombok.Getter;
 public class STM {
     
     // region [For logging]
-    private static final Logger   logger = LoggerFactory.getLogger(STM.class);
+    private static final Logger                        logger = LoggerFactory.getLogger(STM.class);
     // region [For logging]
     
     /**
      * Lock that is used for synchronizing commit phases of transactions. This lock ensures ISOLATION and ATOMICITY are
      * maintained. This lock must be taken before the ownership acquiring phase of the commit phase. The lock is
      * released after commit phase.
+     * 
+     * @InternalUsage
      */
-    private @Getter ReentrantLock commitLock;
+    private @Getter(AccessLevel.PACKAGE) ReentrantLock commitLock;
     
     /**
      * The memory cells or the Memory vector
      */
-    private List<MemoryCell<?>>   memory;
+    private List<MemoryCell<?>>                        memory;
     
     /**
      * Makes a new STM

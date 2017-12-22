@@ -89,7 +89,7 @@ public final class Transaction implements Runnable {
     private STM                             stm;
     
     /**
-     * The list of all the actions to be performed by the transaction in sequence
+     * The list of all the actions to be performed by the transaction in sequence.
      */
     private @Setter List<Supplier<Boolean>> actions;
     
