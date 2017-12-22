@@ -18,12 +18,19 @@ import stm.annotations.ReadLocking;
 import stm.annotations.WriteLocking;
 
 /**
+ * The concrete implementation of the transactional variable. Internally it is a memory cell, a member of the memory --
+ * held in the STM. Each memory cell has data of type T and an unique ID -- UUID.
+ * 
+ * <p>
+ * MemoryCell implements the TVar interface to prevent the consumer from accessing its features directly. Furthermore,
+ * it's package scoped so that it is only accessible internally.
+ * 
  * @author sidmishraw
  *
  *         Qualified Name: stm.MemoryCell
  *
  */
-public class MemoryCell<T> {
+class MemoryCell<T> implements TVar<T> {
     
     // # For synchronized access to the memory cell - very granular
     private ReentrantReadWriteLock memCellLock;

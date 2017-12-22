@@ -16,8 +16,8 @@ import org.slf4j.LoggerFactory;
 
 import com.rits.cloning.Cloner;
 
-import stm.MemoryCell;
 import stm.STM;
+import stm.TVar;
 import stm.Transaction;
 import stm.utils.Transactions;
 
@@ -42,15 +42,15 @@ public class SimpleDriver {
     /**
      * Makes a transaction that adds 1001 to the 3rd element of the array stored in a memory cell.
      * 
-     * @param memCell
+     * @param tVar
      *            the memory cell containing the array
      * @return the transaction
      */
-    private static Transaction makeT1(MemoryCell<Integer[]> memCell) {
+    private static Transaction makeT1(TVar<Integer[]> tVar) {
         return Transactions.newT(stm).begin((t) -> {
-            Integer[] arr = t.read(memCell); // read the contents of the memCell
+            Integer[] arr = t.read(tVar); // read the contents of the tVar
             arr[2] += 1001; // update the value
-            return t.write(memCell, arr); // write the contents to the memCell
+            return t.write(tVar, arr); // write the contents to the tVar
         }).then(t -> {
             logger.info("Logging from the then clause!");
             return true;
@@ -60,15 +60,15 @@ public class SimpleDriver {
     /**
      * Makes a transaction that deducts 1000 from the 3rd element of the array stored in a memory cell.
      * 
-     * @param memCell
+     * @param tVar
      *            the memory cell containing the array
      * @return the transaction
      */
-    private static Transaction makeT2(MemoryCell<Integer[]> memCell) {
+    private static Transaction makeT2(TVar<Integer[]> tVar) {
         return Transactions.newT(stm).begin((t) -> {
-            Integer[] arr = t.read(memCell); // read the contents of the memCell
+            Integer[] arr = t.read(tVar); // read the contents of the tVar
             arr[2] -= 1000; // modify the 3rd element
-            return t.write(memCell, arr); // write the contents to the memCell
+            return t.write(tVar, arr); // write the contents to the tVar
         }).end().done();
     }
     
@@ -78,20 +78,20 @@ public class SimpleDriver {
     public static void main(String[] args) {
         
         // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
-        MemoryCell<Integer[]> memCell = stm.newMemCell(new Integer[] { 1, 2, 3, 4, 5 });
+        TVar<Integer[]> tVar = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
         
         // run the transactions
         // should add 1001 and deduct 3000
         // effectively, it must be 3 + 1001 - 3000 = -1996
         // Note: make sure not to run the same transaction run multiple times. That might cause shared state corruption.
-        // Use a transaction maker - builder function to construct transactions with logic like makeT1(memCell) and
-        // makeT2(memCell). Also, since transactions are threads, it makes sense to execute them again after they are
+        // Use a transaction maker - builder function to construct transactions with logic like makeT1(tVar) and
+        // makeT2(tVar). Also, since transactions are threads, it makes sense to execute them again after they are
         // done executing.
-        stm.exec(makeT2(memCell), makeT1(memCell), makeT2(memCell), makeT2(memCell));
+        stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
         
-        // A logging transaction to check the contents of the memCell. It is a read-only transaction.
+        // A logging transaction to check the contents of the tVar. It is a read-only transaction.
         stm.exec(Transactions.newT(stm).begin((t) -> {
-            Integer[] arr = t.read(memCell);
+            Integer[] arr = t.read(tVar);
             Arrays.asList(arr).forEach(e -> logger.info("member = " + e));
             return true;
         }).end().done());

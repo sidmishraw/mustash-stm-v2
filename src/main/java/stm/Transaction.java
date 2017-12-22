@@ -157,52 +157,52 @@ public final class Transaction implements Runnable {
     // # Transactional Operation related
     
     /**
-     * Reads the contents of the memory cell. It returns a deep clone or copy of the
+     * Reads the contents of the transactional variable or memory cell. It returns a deep clone or copy of the
      * original contents so that there is no accidental modification by the consumer before the commit phase.
      * 
      * <p>
      * <blockquote> <strong> Note: The clone or copy is a deep copy of the contents. </strong> </blockquote>
      * 
-     * @param memCell
-     *            the memory cell to read contents from
-     * @return the contents of the memory cell
+     * @param tVar
+     *            the transactional variable or memory cell to read contents from
+     * @return the contents of the transactional variable or memory cell
      */
     @SuppressWarnings("unchecked")
-    public <T> T read(MemoryCell<T> memCell) {
+    public <T> T read(TVar<T> tVar) {
         T data = null;
         // Inspired by S.P Jones' log based approach to the STM's actions,
         // the read action will read the value from the memory cell for the first time
         // and then it will `quarantine` that value -- store it in the quarantine map --
         // and subsequent reads for the transaction will all come from the quarantined
         // memory cell.
-        if (Objects.isNull(this.readQuarantine.get(memCell))) {
+        if (Objects.isNull(this.readQuarantine.get((MemoryCell<T>) tVar))) {
             // read directly from the memory cell and store in the read-quarantine
-            data = memCell.read();
-            this.readQuarantine.put((MemoryCell<Object>) memCell, data);
+            data = ((MemoryCell<T>) tVar).read();
+            this.readQuarantine.put((MemoryCell<Object>) tVar, data);
         } else {
             // read from the read-quarantine
-            data = (T) this.readQuarantine.get(memCell);
+            data = (T) this.readQuarantine.get((MemoryCell<T>) tVar);
         }
         Cloner clone = new Cloner(); // Java deep cloner
-        data = clone.deepClone(data); // data is a deep-copy/clone of the contents of the memCell
+        data = clone.deepClone(data); // data is a deep-copy/clone of the contents of the tVar
         return data;
     }
     
     /**
      * Writes the data to the memory cell.
      * 
-     * @param memCell
-     *            the memory cell to write into.
+     * @param tVar
+     *            the transactional variable or memory cell to write into.
      * @param newData
      *            the new data to be written
      * @return the status of the write operation, true means success, false means failure.
      */
     @SuppressWarnings("unchecked")
-    public <T> boolean write(MemoryCell<T> memCell, T newData) {
+    public <T> boolean write(TVar<T> tVar, T newData) {
         // Inspired by S.P. Jones' log based approach, the newData is written to the quarantine.
-        // The final quarantined value is written into the memCell during the commit phase of the
+        // The final quarantined value is written into the tVar during the commit phase of the
         // transaction. The transaction writes to the memory cell only after a thorough validation.
-        this.writeQuarantine.put((MemoryCell<Object>) memCell, newData);
+        this.writeQuarantine.put((MemoryCell<Object>) tVar, newData);
         return true;
     }
     // # Transactional Operation related

@@ -57,13 +57,14 @@ public class STM {
     // # Memcell related
     
     /**
-     * Makes a new memory cell containing the data
+     * Makes a new transactional variable holding the provided data.
+     * Internally it is a memory cell containing the data.
      * 
      * @param data
-     *            the data to be put into the memory cell
-     * @return the memory cell holding the data
+     *            the data to be put into the transactional variable or memory cell
+     * @return the transactional variable or memory cell holding the data
      */
-    public <T> MemoryCell<T> newMemCell(T data) {
+    public <T> TVar<T> newTVar(T data) {
         MemoryCell<T> memCell = new MemoryCell<>(data);
         this.memory.add(memCell);
         return memCell;
