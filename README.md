@@ -4,6 +4,10 @@ Author: Sidharth Mishra
 
 This is a work in progress. More updates soon.
 
+
+## Latest updates on the [`without-ownerships` branch](https://github.com/sidmishraw/mustash-stm-v2/tree/without-ownerships)
+
+
 ## Requirements
 
 * Java 8+
