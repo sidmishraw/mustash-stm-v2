@@ -10,7 +10,7 @@ This is a work in progress. More updates soon.
 
 ## Usage Examples
 
-The sample usage is demonstrated in the [SimpleDriver.java](./src/test/java/SimpleDriver.java) class.
+The sample usage is demonstrated in the [SimpleDriver.java](./src/test/java/simple/SimpleDriver.java) class.
 
 * Initializing the STM.
 
@@ -21,21 +21,28 @@ The sample usage is demonstrated in the [SimpleDriver.java](./src/test/java/Simp
 private static final STM    stm    = new STM();
 ```
 
+* Creating transactional variables (internally represented as memory cells):
+
+```java
+// let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
+TVar<Integer[]> tVar = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
+```
+
 * Making transactions is simpler now.
 
 ```java
 /**
  * Makes a transaction that adds 1001 to the 3rd element of the array stored in a memory cell.
  * 
- * @param memCell
+ * @param tVar
  *            the memory cell containing the array
  * @return the transaction
  */
-private static Transaction makeT1(MemoryCell<Integer[]> memCell) {
+private static Transaction makeT1(TVar<Integer[]> tVar) {
     return Transactions.newT(stm).begin((t) -> {
-        Integer[] arr = t.read(memCell); // read the contents of the memCell
+        Integer[] arr = t.read(tVar); // read the contents of the tVar
         arr[2] += 1001; // update the value
-        return t.write(memCell, arr); // write the contents to the memCell
+        return t.write(tVar, arr); // write the contents to the tVar
     }).then(t -> {
         logger.info("Logging from the then clause!");
         return true;
@@ -46,7 +53,7 @@ private static Transaction makeT1(MemoryCell<Integer[]> memCell) {
 * Executing the transactions. Use `exec` to execute the transactions concurrently while making the parent thread wait for all the transactions to be done executing. Otherwise, use `forkAndExec` to fork and execute the transactions concurrently.
 
 ```java
-stm.exec(makeT2(memCell), makeT1(memCell), makeT2(memCell), makeT2(memCell));
+stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
 ```
 
 
@@ -59,6 +66,13 @@ stm.exec(makeT2(memCell), makeT1(memCell), makeT2(memCell), makeT2(memCell));
 * Eclipse/IntelliJ Idea + Project Lombok - used for boilerplate reduction
 
 * Java Deep Cloning Library - uses reflection to construct deep clones
+
+
+## Changelog v2.1 - only on branch - without-ownerships
+
+* Made `MemoryCell` package scoped, renamed the `newMemCell` method to `newTVar`. Added `TVar` empty interface to make sure that the transactional variables or memory cells are only operated internally -- within the `stm` package.
+
+* Transactional `read` and `write` methods now take `TVar`s as arguments instead of `MemoryCell`s. 
 
 
 ## Changelog v2.0 - only on branch - without-ownerships
