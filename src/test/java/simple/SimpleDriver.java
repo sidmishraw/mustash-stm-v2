@@ -102,9 +102,9 @@ public class SimpleDriver {
      */
     @Test
     public void testCloner() {
-        Integer arr = 1;// new Integer[] { 1, 2, 3, 4, 5 };
+        Integer[] arr = new Integer[] { 1, 2, 3, 4, 5 };
         Cloner cloner = new Cloner();
-        Integer newArr = cloner.deepClone(null);
+        Integer[] newArr = cloner.deepClone(arr);
         System.out.println("arr = " + arr);
         System.out.println("newArr = " + newArr);
         System.out.println("arr == newArr = " + newArr.equals(arr));

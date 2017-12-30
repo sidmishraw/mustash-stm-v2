@@ -4,3 +4,4 @@
 .project
 .settings
 *.class
+/build/

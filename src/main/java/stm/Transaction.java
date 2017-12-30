@@ -184,6 +184,7 @@ public final class Transaction implements Runnable {
             data = (T) this.readQuarantine.get((MemoryCell<T>) tVar);
         }
         Cloner clone = new Cloner(); // Java deep cloner
+        clone.registerImmutable(TVar.class, MemoryCell.class); // register instances TVars as immutable when cloning
         data = clone.deepClone(data); // data is a deep-copy/clone of the contents of the tVar
         return data;
     }
