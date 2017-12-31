@@ -70,6 +70,44 @@ public final class Transactions {
          * 
          * {@code
          *      Transactions.newT()
+         *          .begin()
+         *          .then((t) -> action2())
+         *          .orElse((t) -> action3(), (t) -> action4()) // for choice
+         *          ...
+         *          .end()
+         *          .done();
+         * }
+         * 
+         * <p>
+         * 
+         * See also {@linkplain TransactionContext#then(Function)} and {@linkplain TransactionContext#end} for more
+         * information.
+         * 
+         * See also {@linkplain TransactionContext#begin(Function)}
+         * 
+         * @param action
+         *            the initial action of the transaction
+         * @return the updated transaction context
+         */
+        public TransactionContext begin() {
+            this.delayedActions = new ArrayList<>();
+            return this;
+        }
+        
+        /**
+         * <p>
+         * Signals the start of the transaction's action addition phase. The main reason for adding a method of this
+         * name is to get a thenable `then` styled API. What I want is something like:
+         * </p>
+         * 
+         * <p>
+         * This is a shorthand for adding the first action, good for transactions with only one action.
+         * </p>
+         * 
+         * <p>
+         * 
+         * {@code
+         *      Transactions.newT()
          *          .begin((t) -> action1())
          *          .then((t) -> action2())
          *          ...
@@ -107,6 +145,37 @@ public final class Transactions {
          */
         public TransactionContext then(Function<Transaction, Boolean> action) {
             this.delayedActions.add(() -> action.apply(this.t));
+            return this;
+        }
+        
+        /**
+         * <p>
+         * Signals the choice operation. If the first action fails, the second action is tried. If both fail, the
+         * transaction is aborted.
+         * </p>
+         * 
+         * @param fstChoice
+         *            The first action, if succeeds, it is the final result.
+         * @param sndChoice
+         *            The second action that is tried if the first action fails.
+         * @return The updated transaction context.
+         */
+        public TransactionContext orElse(Function<Transaction, Boolean> fstChoice,
+                Function<Transaction, Boolean> sndChoice) {
+            /**
+             * <p>
+             * In order to achieve this, I make a bigger action that when performed, first performs the fstChoice. If
+             * fstChoice is successful, the transaction carries on as usual skipping the sndChoice. Otherwise, it
+             * performs the sndChoice. If the action is successful, the transaction carries on as usual else it aborts.
+             * </p>
+             */
+            this.delayedActions.add(() -> {
+                boolean fstStatus = fstChoice.apply(this.t);
+                if (fstStatus)
+                    return true;
+                else
+                    return sndChoice.apply(this.t);
+            });
             return this;
         }
         
