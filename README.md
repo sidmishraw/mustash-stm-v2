@@ -5,6 +5,8 @@ Author: Sidharth Mishra
 
 ## Descripton
 
+Moved over to STMAction and Monads.
+
 This is a work in progress. More updates soon.
 
 
@@ -24,11 +26,70 @@ private static final STM    stm    = new STM();
 * Creating transactional variables (internally represented as memory cells):
 
 ```java
+//
+// STM#newTVar() now returns a STMAction which when performed creates a new memory cell in the STM.
 // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
-TVar<Integer[]> tVar = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
+//
+STMAction<TVar<Integer[]>> creationAction = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
+
+//
+// To access the tVar, perform the creationAction (STNAction)
+//
+TVar<Integer[]> tVar = creationAction.unwrap();
+
+//
+// Or in order to chain other actions, one can use the Monad#bind()
+//
+
+//
+//
+//
+stm.newTVar(1000).bind(account1 ->
+//
+//
+stm.newTVar(500).bind(account2 ->
+//
+//
+stm.newTVar(2000).bind(account3 ->
+
+{
+    //
+    // operation
+    //
+    stm.exec(Transaction.builder().stm(stm).action(t -> t.read(account1).bind(acc1Bal -> {
+        if (acc1Bal > 1000) {
+            return withdraw(t, account1, 100).bind(b1 -> deposit(t, account2, 100).bind(b2 -> new STMAction<
+                    Boolean>(() -> b1.booleanValue() && b2.booleanValue())));
+        } else {
+            return withdraw(t, account1, 500).bind(b1 -> deposit(t, account2, 500).bind(b2 -> new STMAction<
+                    Boolean>(() -> b1.booleanValue() && b2.booleanValue())));
+        }
+    })).build());
+    
+    //
+    // logging
+    //
+    stm.exec(Transaction.builder().stm(stm).action(t -> t.read(account1).bind(acc1 -> {
+        logger.info("Acc1 = " + acc1);
+        return t.read(account2);
+    }).bind(acc2 -> {
+        logger.info("Acc2 = " + acc2);
+        return t.read(account3);
+    }).bind(acc3 -> {
+        logger.info("Acc3 = " + acc3);
+        return new STMAction<>(() -> true);
+    })).build());
+    
+    //
+    //
+    //
+    return new STMAction<Void>(() -> null);
+})));
+       
+    
 ```
 
-* Making transactions is simpler now.
+* Making transactions is simpler now. I have included a TransactionBuilder (courtesy Lombok):
 
 ```java
 /**
@@ -39,14 +100,14 @@ TVar<Integer[]> tVar = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
  * @return the transaction
  */
 private static Transaction makeT1(TVar<Integer[]> tVar) {
-    return Transactions.newT(stm).begin((t) -> {
-        Integer[] arr = t.read(tVar); // read the contents of the tVar
-        arr[2] += 1001; // update the value
-        return t.write(tVar, arr); // write the contents to the tVar
-    }).then(t -> {
-        logger.info("Logging from the then clause!");
-        return true;
-    }).end().done();
+    return Transaction.builder()
+    	.stm(stm)
+    	.action(t -> t.read(tVar)
+    		.bind(arr -> new STMAction<Integer[]>(() -> {
+				arr[2] += 1001;
+				return arr;
+			}).bind(uarr -> t.write(tVar, uarr))))
+	.build();
 }
 ```
 
@@ -66,6 +127,17 @@ stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
 * Eclipse/IntelliJ Idea + Project Lombok - used for boilerplate reduction
 
 * Java Deep Cloning Library - uses reflection to construct deep clones
+
+
+## Changelog v3.0 - only on branch - with-stm-monad
+
+* Introduced `Monad`.
+
+* Introduced the `STMAction<R>` Monad.
+
+* Updated the `Transaction` to include a `TransactionBuilder` to make the API more uniform.
+
+* Haskell like `shove` or `bind` operations to utilize full power of Monads.
 
 
 ## Changelog v2.1 - only on branch - without-ownerships

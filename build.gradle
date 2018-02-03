@@ -53,3 +53,7 @@ jar {
                    'Implementation-Version': project.version)
     }
 }
+
+// compiler source and target versions
+sourceCompatibility = "1.8"
+targetCompatibility = "1.8"

@@ -11,10 +11,10 @@ package simple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import monad.STMAction;
 import stm.STM;
 import stm.TVar;
 import stm.Transaction;
-import stm.utils.Transactions;
 
 /**
  * @author sidmishraw
@@ -25,7 +25,11 @@ import stm.utils.Transactions;
 public class SimpleDriver2 {
     
     private static final Logger logger = LoggerFactory.getLogger(SimpleDriver2.class);
-    private static final STM    stm    = new STM();
+    
+    //
+    // STM
+    //
+    private static final STM stm = new STM();
     
     /**
      * Deposits the amount into the account.
@@ -38,9 +42,8 @@ public class SimpleDriver2 {
      *            The amount to deposit.
      * @return the status of the deposit operation
      */
-    private static final boolean deposit(Transaction t, TVar<Integer> account, int amount) {
-        int bal = t.read(account);
-        return t.write(account, bal + amount);
+    private static final STMAction<Boolean> deposit(Transaction t, TVar<Integer> account, int amount) {
+        return t.read(account).bind(bal -> t.write(account, bal + amount));
     }
     
     /**
@@ -54,33 +57,59 @@ public class SimpleDriver2 {
      *            The amount to withdraw.
      * @return the status of the operation.
      */
-    private static final boolean withdraw(Transaction t, TVar<Integer> account, int amount) {
-        int bal = t.read(account);
-        return t.write(account, bal - amount);
+    private static final STMAction<Boolean> withdraw(Transaction t, TVar<Integer> account, int amount) {
+        return t.read(account).bind(bal -> t.write(account, bal - amount));
     }
     
     /**
      * @param args
      */
     public static void main(String[] args) {
-        TVar<Integer> account1 = stm.newTVar(1000);
-        TVar<Integer> account2 = stm.newTVar(500);
-        TVar<Integer> account3 = stm.newTVar(2000);
-        // operation
-        stm.exec(Transactions.newT(stm).begin().orElse(t -> {
-            int acc1Bal = t.read(account1);
-            if (acc1Bal > 1000) {
-                return withdraw(t, account1, 100) && deposit(t, account2, 100);
-            }
-            return false;
-        }, t -> withdraw(t, account3, 500) && deposit(t, account2, 500)).end().done());
-        // logging
-        stm.exec(Transactions.newT(stm).begin(t -> {
-            logger.info("Acc1 = " + t.read(account1));
-            logger.info("Acc2 = " + t.read(account2));
-            logger.info("Acc3 = " + t.read(account3));
-            return true;
-        }).end().done());
+        //
+        //
+        //
+        stm.newTVar(1000).bind(account1 ->
+        //
+        //
+        stm.newTVar(500).bind(account2 ->
+        //
+        //
+        stm.newTVar(2000).bind(account3 ->
+        
+        {
+            //
+            // operation
+            //
+            stm.exec(Transaction.builder().stm(stm).action(t -> t.read(account1).bind(acc1Bal -> {
+                if (acc1Bal > 1000) {
+                    return withdraw(t, account1, 100).bind(b1 -> deposit(t, account2, 100).bind(b2 -> new STMAction<
+                            Boolean>(() -> b1.booleanValue() && b2.booleanValue())));
+                } else {
+                    return withdraw(t, account1, 500).bind(b1 -> deposit(t, account2, 500).bind(b2 -> new STMAction<
+                            Boolean>(() -> b1.booleanValue() && b2.booleanValue())));
+                }
+            })).build());
+            
+            //
+            // logging
+            //
+            stm.exec(Transaction.builder().stm(stm).action(t -> t.read(account1).bind(acc1 -> {
+                logger.info("Acc1 = " + acc1);
+                return t.read(account2);
+            }).bind(acc2 -> {
+                logger.info("Acc2 = " + acc2);
+                return t.read(account3);
+            }).bind(acc3 -> {
+                logger.info("Acc3 = " + acc3);
+                return new STMAction<>(() -> true);
+            })).build());
+            
+            //
+            //
+            //
+            return new STMAction<Void>(() -> null);
+        })));
+        
     }
     
 }

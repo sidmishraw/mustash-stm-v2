@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import lombok.AccessLevel;
 import lombok.Getter;
+import monad.STMAction;
 
 /**
  * The shared memory object that behaves like a memory whose addresses/cells can be operated by
@@ -32,8 +33,12 @@ import lombok.Getter;
 public class STM {
     
     // region [For logging]
-    private static final Logger                        logger = LoggerFactory.getLogger(STM.class);
+    private static final Logger logger = LoggerFactory.getLogger(STM.class);
     // region [For logging]
+    
+    //
+    // STM LOCK
+    //
     
     /**
      * Lock that is used for synchronizing commit phases of transactions. This lock ensures ISOLATION and ATOMICITY are
@@ -44,20 +49,27 @@ public class STM {
      */
     private @Getter(AccessLevel.PACKAGE) ReentrantLock commitLock;
     
+    //
+    // MEMORY
+    //
+    
     /**
      * The memory cells or the Memory vector
      */
-    private List<MemoryCell<?>>                        memory;
+    private List<MemoryCell<?>> memory;
     
     /**
-     * Makes a new STM
+     * <p>
+     * Makes a new STM.
+     * </p>
      */
     public STM() {
         this.memory = new ArrayList<>();
         this.commitLock = new ReentrantLock();
     }
     
-    // # Memcell related
+    // ========================================================================================================================
+    // # Memcell related ==============================================================================================
     
     /**
      * Makes a new transactional variable holding the provided data.
@@ -65,17 +77,22 @@ public class STM {
      * 
      * @param data
      *            the data to be put into the transactional variable or memory cell
-     * @return the transactional variable or memory cell holding the data
+     * 
+     * @return a STM action that when performed returns the transactional variable or memory cell holding the data
      */
-    public <T> TVar<T> newTVar(T data) {
-        MemoryCell<T> memCell = new MemoryCell<>(data);
-        this.memory.add(memCell);
-        return memCell;
+    public <T> STMAction<TVar<T>> newTVar(T data) {
+        return new STMAction<>(() -> {
+            MemoryCell<T> memCell = new MemoryCell<>(data);
+            this.memory.add(memCell);
+            return memCell;
+        });
     }
     
-    // # Memcell related
+    // # Memcell related ==============================================================================================
+    // ========================================================================================================================
     
-    // # transaction execution strategies
+    // ========================================================================================================================
+    // # transaction execution strategies ===========================================================================
     
     /**
      * Executes all the transactions concurrently and makes <strong>the main-thread or parent thread wait till all of
@@ -92,12 +109,23 @@ public class STM {
      *            the transactions to execute concurrently
      */
     public void exec(Transaction... ts) {
+        //
+        //
         CountDownLatch latch = new CountDownLatch(ts.length);
+        //
+        //
         Arrays.asList(ts).forEach(t -> {
-            t.go(latch); // execute the transaction with the latch
+            //
+            // execute the transaction with the latch
+            //
+            t.go(latch);
         });
+        //
+        //
         try {
+            //
             // wait till all the transactions are done executing
+            //
             latch.await();
         } catch (Exception e) {
             logger.error(e.getMessage());
@@ -116,13 +144,27 @@ public class STM {
      */
     public void forkAndExec(Transaction... ts) {
         new Thread(() -> {
+            //
+            //
             logger.debug("Forking and starting all the transactions...");
+            //
+            //
+            //
             CountDownLatch latch = new CountDownLatch(ts.length);
+            //
+            //
             Arrays.asList(ts).forEach(t -> {
-                t.go(latch); // execute the transaction with the latch
+                //
+                // execute the transaction with the latch
+                //
+                t.go(latch);
             });
+            //
+            //
             try {
+                //
                 // wait till all the transactions are done executing
+                //
                 latch.await();
             } catch (Exception e) {
                 logger.error(e.getMessage());
@@ -130,7 +172,8 @@ public class STM {
         }).start();
     }
     
-    // # transaction execution strategies
+    // # transaction execution strategies ===========================================================================
+    // ========================================================================================================================
     
     /**
      * Prints the state of all the memory cells of the STM.
