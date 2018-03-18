@@ -1,16 +1,12 @@
 /**
- * Project: STMv2
- * Package: stm.annotations
- * File: WriteLocking.java
+ * Project: STMv2 Package: stm.annotations File: WriteLocking.java
  * 
- * @author sidmishraw
- *         Last modified: Dec 18, 2017 6:25:20 PM
+ * @author sidmishraw Last modified: Dec 18, 2017 6:25:20 PM
  */
 package stm.annotations;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
@@ -26,4 +22,5 @@ import java.lang.annotation.Target;
  *         Qualified Name: stm.annotations.WriteLocking
  *
  */
-public @interface WriteLocking {}
+public @interface WriteLocking {
+}
