@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  *         Qualified Name: monad.STMAction
  *
  */
-public class STMAction<R> implements Monad<R> {
+public class STMAction<R> {
 
   /**
    * The action performed when the STMAction is executed.
@@ -33,25 +33,17 @@ public class STMAction<R> implements Monad<R> {
   }
 
   /**
-   * First executes the current STMAction, the result is then shoved into the function
-   * `fromAToMonadOfB` and the resulting Monad is returned.
-   * 
-   * @see monad.Monad#bind(java.util.function.Function)
+   * First executes the current STMAction, the result is then shoved into the transformer function
+   * and the resulting Monad is returned.
    */
-  @Override
-  public <RR extends Monad<R1>, R1> RR bind(Function<R, RR> transformer) {
+  public <S> STMAction<S> bind(Function<R, STMAction<S>> transformer) {
     R actionResult = this.action.get();
     return transformer.apply(actionResult);
   }
 
   /**
-   * <p>
    * Performs the STMAction and returns any result of the action.
-   * </p>
-   * 
-   * @see monad.Monad#unwrap()
    */
-  @Override
   public R unwrap() {
     return this.action.get();
   }

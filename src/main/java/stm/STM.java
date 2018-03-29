@@ -54,9 +54,7 @@ public class STM {
   private List<MemoryCell<?>> memory;
 
   /**
-   * <p>
    * Makes a new STM.
-   * </p>
    */
   public STM() {
     this.memory = new ArrayList<>();
@@ -71,10 +69,10 @@ public class STM {
    * Makes a new transactional variable holding the provided data. Internally it is a memory cell
    * containing the data.
    * 
-   * @param data the data to be put into the transactional variable or memory cell
+   * @param data The data to be put into the transactional variable or memory cell.
    * 
-   * @return a STM action that when performed returns the transactional variable or memory cell
-   *         holding the data
+   * @return An STM action that when performed returns the transactional variable or memory cell
+   *         holding the data.
    */
   public <T> STMAction<TVar<T>> newTVar(T data) {
     return new STMAction<>(() -> {
@@ -93,15 +91,13 @@ public class STM {
   // ===========================================================================
 
   /**
-   * Executes all the transactions concurrently and makes <strong>the main-thread or parent thread
-   * wait till all of the transactions are done executing.</strong>
+   * Executes all the transactions concurrently and makes the main-thread or parent thread wait till
+   * all of the transactions are done executing.
    * 
-   * <p>
+   * Note: Having this as a member of the STM object reduces the risk for executing transactions in
+   * some other STM object's context.
    * 
-   * <blockquote> Note: Having this as a member of the STM object reduces the risk for executing
-   * transactions in some other STM object's context. </blockquote>
-   * 
-   * @param ts the transactions to execute concurrently
+   * @param ts The transactions to execute concurrently.
    */
   public void exec(Transaction... ts) {
     //
@@ -128,10 +124,9 @@ public class STM {
   }
 
   /**
-   * Executes the transactions concurrently <strong> without making their parent (main-thread) wait
-   * till all of them are done executing.</strong>
+   * Executes the transactions concurrently without making their parent (main-thread) wait till all
+   * of them are done executing.
    * 
-   * <p>
    * See also {@linkplain STM#exec(Transaction...)}
    * 
    * @param ts The transactions to execute concurrently

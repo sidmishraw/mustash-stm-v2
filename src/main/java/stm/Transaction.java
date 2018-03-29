@@ -62,7 +62,6 @@ public final class Transaction implements Runnable {
    * successfully, the quarantined values become visible to all other transactions/threads at once.
    * This is important for maintaining ISOLATION and ATOMICITY.
    * 
-   * <p>
    * In earlier versions, I used to call this map as `oldValues`. But, the name doesn't suit its
    * purpose.
    */
@@ -207,14 +206,12 @@ public final class Transaction implements Runnable {
    * copy of the original contents so that there is no accidental modification by the consumer
    * before the commit phase.
    * 
-   * <p>
-   * <blockquote> <strong> Note: The clone or copy is a deep copy of the contents. </strong>
-   * </blockquote>
+   * Note: The clone or copy is a deep copy of the contents.
    * 
-   * @param tVar the transactional variable or memory cell to read contents from
+   * @param tVar The transactional variable or memory cell to read contents from.
    * 
-   * @return A STM action that when performed returns the contents of the transactional variable or
-   *         memory cell
+   * @return An STM action that when performed returns the contents of the transactional variable or
+   *         memory cell.
    */
   @SuppressWarnings("unchecked")
   public <T> STMAction<T> read(TVar<T> tVar) {
@@ -279,10 +276,10 @@ public final class Transaction implements Runnable {
   /**
    * Writes the data to the memory cell.
    * 
-   * @param tVar the transactional variable or memory cell to write into.
-   * @param newData the new data to be written.
+   * @param tVar The transactional variable or memory cell to write into.
+   * @param newData The new data to be written.
    * 
-   * @return A STM action which when performed will return the status of the write operation, true
+   * @return An STM action which when performed will return the status of the write operation, true
    *         means success, false means failure.
    */
   @SuppressWarnings("unchecked")
@@ -312,13 +309,6 @@ public final class Transaction implements Runnable {
 
   // # Transactional Operation related
   // ==================================================================================================================
-
-  /**
-   * Executes all the actions of the transaction in-order. Returns true if all actions executed
-   * successfully otherwise, returns false.
-   * 
-   * @return the result of the execution.
-   */
 
   /**
    * Re-initializes the readQuarantine and the writeQuarantine so that the transaction can retry
