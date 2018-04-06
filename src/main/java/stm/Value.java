@@ -30,9 +30,24 @@
 package stm;
 
 /**
+ * A value that can be stored in the STM's memory cell. It is cloneable and equitable.
  * Qualified Name: stm.Value
  */
 public interface Value {
+  
+  /**
+   * Creates and returns a clone of the object whose modification doesn't affect the original object.
+   * 
+   * @return The zero modification impact clone of the object.
+   */
   Value clone();
+  
+  /**
+   * Checks if this value is equal to the given value.
+   * 
+   * @param v
+   *          The value to equate against.
+   * @return true if both are equal, else false.
+   */
   Boolean equals(Value v);
 }
