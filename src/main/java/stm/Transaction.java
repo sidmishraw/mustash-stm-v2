@@ -12,266 +12,268 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.rits.cloning.Cloner;
+
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Singular;
 
 /**
+ * The transaction is the only way to modify the state being managed by the STM.
+ * 
  * @author sidmishraw
- *
  *         Qualified Name: stm.Transaction
- *
  */
 public final class Transaction implements Runnable {
-
-  // # For logging
+  
   private static final Logger logger = LoggerFactory.getLogger(Transaction.class);
-  // # For logging
-
+  
   /**
    * The latch used for holding the invoking thread (main-thread) till this transaction is done
    * computing.
    */
   private CountDownLatch latch;
-
-  // # Metadata
-
+  
   /**
    * Denotes the version number of the transaction. It is the number of times the transaction has
    * completed execution successfully. It is updated after every successful run.
    */
-  private @Getter int version;
-
+  private @Getter(value = AccessLevel.PACKAGE) int version;
+  
   /**
    * A boolean flag that indicates if the transaction has completed execution successfully.
    */
-  private @Getter boolean isComplete;
-
-  // # thread local quarantines
+  private @Getter(value = AccessLevel.PACKAGE) boolean isComplete;
+  
   /**
-   * The {@link Transaction}{@link #quarantine} indicates the thread local storage. This map holds
-   * the values of the memory cells before the transaction commits. If the transaction commits
-   * successfully, the quarantined values become visible to all other transactions/threads at once.
-   * This is important for maintaining ISOLATION and ATOMICITY.
-   * 
-   * <p>
-   * In earlier versions, I used to call this map as `oldValues`. But, the name doesn't suit its
-   * purpose.
+   * Flag that protects against accessing deleted memory cells. If this is true, the entire transaction is invalidated.
    */
+  private boolean shouldAbort;
+  
+  /**
+   * The transactional quarantine indicates the thread local storage. It is a map/table that holds
+   * the memory cell and its thread local value. This is needed for maintaing ISOLATION.
+   * If the transaction commits successfully, the write quarantined values become visible to all other
+   * transactions/threads at once.
+   * This is important for maintaining ISOLATION and ATOMICITY. In earlier versions, I used to call this map as
+   * `oldValues`. But, the name doesn't suit its purpose.
+   */
+  
   /**
    * The set of memory cells that the transaction intends to read from. The transaction will only
    * read from the memory cell once. Then, it will add the contents of the memory cell into the
    * readQuarantine. All subsequent reads will take place from the readQuarantine.
    */
-  private Map<MemoryCell<Object>, Object> readQuarantine;
-
+  private Map<MemoryCell, Value> readQuarantine;
+  
   /**
    * The set of memory cells that the transaction intends to write to. The transaction writes the
-   * new data into the write quarantine. The memory cell is updated only after all the actions of
-   * the transaction have been thoroughly validated.
+   * new data into the write quarantine. The actual memory cell is updated only after all the actions of
+   * the transaction have been thoroughly validated during the commit phase.
    */
-  private Map<MemoryCell<Object>, Object> writeQuarantine;
-
-  // # thread local quarantines
-
-  // # Metadata
-
+  private Map<MemoryCell, Value> writeQuarantine;
+  
   /**
    * The reference to the STM object the transaction operates upon.
    */
   private STM stm;
-
+  
   /**
    * The list of all the actions to be performed by the transaction in sequence.
    */
   private List<Function<Transaction, Boolean>> actions;
-
+  
   /**
    * Creates a new transaction for the given STM.
    * 
-   * @param stm the STM object that the transaction operates on.
+   * @param stm
+   *          the STM object that the transaction operates on.
    */
   @Builder
-  public Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
+  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
     this.version = 0;
     this.isComplete = false;
     this.readQuarantine = new HashMap<>();
     this.writeQuarantine = new HashMap<>();
     this.stm = stm;
     this.actions = actions;
+    this.shouldAbort = false;
   }
-
+  
   /*
    * (non-Javadoc)
-   * 
    * @see java.lang.Runnable#run()
    */
   @Override
   public void run() {
-
+    
     logger.debug("Transaction: " + Thread.currentThread().getName() + " has started execution.");
-
+    
     this.isComplete = false; // the transaction has begun execution
-
-    while (!this.isComplete) {
-
+    
+    while (!this.isComplete && !this.shouldAbort) {
+      
       // 1. execute actions
       if (!this.executeActions()) {
         // execution of actions failed, the transaction needs to rollback and start from the
         // beginning
         logger.info(Thread.currentThread().getName() + " failed to execute, hence rolling back");
         this.rollback();
-        this.isComplete = false;
         continue;
       }
-
+      
       // 2. validate quarantined values and commit
       if (!this.commit()) {
         // if commit failed, rollback and begin execution from the beginning
         logger.info(Thread.currentThread().getName() + " failed to commit, hence rolling back");
         this.rollback();
-        this.isComplete = false;
         continue;
       }
-
+      
       this.isComplete = true; // the transaction is done executing
     }
-
-    // # debugging -- checking state of memory cells
-    // this.stm.printState();
-    // # debugging -- checking state of memory cells
-    logger.debug("Transaction: " + Thread.currentThread().getName() + " has finished execution.");
-    this.version = this.version + 1; // increment the version
-    this.latch.countDown(); // signal the calling thread that this is done
+    
+    // this.stm.printState(); // for debugging
+    if (this.shouldAbort) {
+      logger.info(Thread.currentThread().getName() + " has been invalidated!");
+      this.isComplete = true;
+    } else {
+      logger.debug("Transaction: " + Thread.currentThread().getName() + " has finished execution.");
+      this.version = this.version + 1;
+    }
+    
+    if (!Objects.isNull(this.latch)) this.latch.countDown(); // signal the calling thread that this is done
   }
-
+  
   /**
    * Runs transaction with a latch so that the parent thread will wait for the transaction to end
    * execution.
    * 
-   * @param latch the latch on which the parent thread will await
+   * @param latch
+   *          the latch on which the parent thread will await
    */
-  public void go(CountDownLatch latch) {
+  void go(CountDownLatch latch) {
     this.latch = latch;
     Thread currentThread = new Thread(this);
     currentThread.start();
   }
-
-  // # Transactional Operation related
-
+  
+  /**
+   * Executes this transaction in a new thread.
+   */
+  void execute() {
+    Thread currentThread = new Thread(this);
+    currentThread.start();
+  }
+  
   /**
    * Reads the contents of the transactional variable or memory cell. It returns a deep clone or
    * copy of the original contents so that there is no accidental modification by the consumer
    * before the commit phase.
+   * Note: The clone or copy is a deep copy of the contents.
    * 
-   * <p>
-   * <blockquote> <strong> Note: The clone or copy is a deep copy of the contents. </strong>
-   * </blockquote>
-   * 
-   * @param tVar the transactional variable or memory cell to read contents from
-   * @return the contents of the transactional variable or memory cell
+   * @param tVar
+   *          The transactional variable or memory cell to read contents from.
+   * @param classz
+   *          The concrete type for the Value.
+   * @return The concrete value.
    */
-  @SuppressWarnings("unchecked")
-  public <T> T read(TVar<T> tVar) {
-
+  public <T> T read(TVar tVar, Class<T> classz) {
+    
     try {
-
+      
       if (Objects.isNull(tVar)) {
         return null;
       }
-
-      T data = null;
-
+      
+      Value data = null;
+      
       // Inspired by S.P Jones' log based approach to the STM's actions,
       // the read action will read the value from the memory cell for the first time
       // and then it will `quarantine` that value -- store it in the quarantine map --
-      // and subsequent reads for the transaction will all come from the quarantined
+      // and then, the subsequent reads for the transaction will all come from the quarantined
       // memory cell.
-      if (Objects.isNull(this.readQuarantine.get((MemoryCell<T>) tVar))) {
-        // read directly from the memory cell and store in the read-quarantine
-        data = ((MemoryCell<T>) tVar).read();
-        this.readQuarantine.put((MemoryCell<Object>) tVar, data);
+      if (Objects.isNull(this.readQuarantine.get((MemoryCell) tVar))) {
+        data = ((MemoryCell) tVar).read();
+        this.readQuarantine.put((MemoryCell) tVar, data);
       } else {
-        // read from the read-quarantine
-        data = (T) this.readQuarantine.get((MemoryCell<T>) tVar);
+        data = this.readQuarantine.get((MemoryCell) tVar);
       }
-
-      Cloner clone = new Cloner(); // Java deep cloner
-      clone.registerImmutable(TVar.class, MemoryCell.class); // register instances TVars as
-                                                             // immutable
-                                                             // when cloning
-      data = clone.deepClone(data); // data is a deep-copy/clone of the contents of the tVar
-
-      return data;
+      
+      return classz.cast(data.clone());
     } catch (Exception e) {
-
+      
       logger.error(e.getMessage(), e);
-
+      
       return null;
     }
   }
-
+  
   /**
-   * Writes the data to the memory cell.
+   * Writes the data to the quarantined memory cell. Basically, the transaction holds onto its copy of updated data in
+   * its write quarantine. During the commit phase, it will validate its read quarantine members and upon successful
+   * validation, it will flush the contents of its write quarantined members into the STM.
+   * This makes the changes of this transaction visible to its peers at once -- atomic.
    * 
-   * @param tVar the transactional variable or memory cell to write into.
-   * @param newData the new data to be written
-   * @return the status of the write operation, true means success, false means failure.
+   * @param tVar
+   *          The transactional variable or memory cell to write into.
+   * @param newData
+   *          The new data to be written
+   * @return The status of the write operation, true means success, false means failure.
    */
-  @SuppressWarnings("unchecked")
-  public <T> boolean write(TVar<T> tVar, T newData) {
-
+  public boolean write(TVar tVar, Value newData) {
+    
     try {
-
+      
       // Inspired by S.P. Jones' log based approach, the newData is written to the quarantine.
       // The final quarantined value is written into the tVar during the commit phase of the
       // transaction. The transaction writes to the memory cell only after a thorough validation.
-      this.writeQuarantine.put((MemoryCell<Object>) tVar, newData);
-
+      this.writeQuarantine.put((MemoryCell) tVar, newData);
+      
       return true;
     } catch (Exception e) {
-
+      
       return false;
     }
   }
   // # Transactional Operation related
-
+  
   /**
    * Executes all the actions of the transaction in-order. Returns true if all actions executed
    * successfully otherwise, returns false.
    * 
-   * @return the result of the execution.
+   * @return The result of the execution.
    */
   private boolean executeActions() {
-
+    
     // logger.info("Executing Actions");
-
+    
     // generate the stats for all the actions of this transaction.
-    List<Boolean> stats =
-        this.actions.stream().map(action -> action.apply(this)).collect(Collectors.toList());
-
+    List<Boolean> stats = this.actions.stream().map(action -> action.apply(this)).collect(Collectors.toList());
+    
     // filter out failed actions
     List<Boolean> res = stats.stream().filter(stat -> !stat).collect(Collectors.toList());
-
+    
     if (res.size() > 0) {
       return false; // atleast one operation has failed
     }
-
+    
     return true;
   }
-
+  
   /**
-   * Re-initializes the readQuarantine and the writeQuarantine so that the transaction can retry
+   * Re-initializes the read quarantine and the write quarantine so that the transaction can retry
    * from the beginning.
    */
   private void rollback() {
     this.readQuarantine = new HashMap<>();
     this.writeQuarantine = new HashMap<>();
+    this.isComplete = false;
   }
-
+  
   /**
    * The commit phase of the transaction. In this phase, the transaction validates its quarantined
    * values and posts the values of its write set members. The values of the read set members are
@@ -280,57 +282,66 @@ public final class Transaction implements Runnable {
    * @return status of the commit, false signals a failed commit, true is a successful commit.
    */
   private boolean commit() {
-
+    
     try {
-
+      
       logger.info(Thread.currentThread().getName() + " begins its commit phase");
-
-      // Setup step: Acquire the commit lock on the STM. This lock helps to ensure ATOMICITY and
-      // ISOLATION.
-      this.stm.getCommitLock().lock();
-
-      // logger.error("HARMLESS: Lock acquired!");
-
-      // -- First, the transaction needs to validate its read quarantined values.
+      
+      this.stm.acquireCommitLock(); // for serializability
+      
       logger.info(Thread.currentThread().getName()
           + " begins validating its read quarantined values in the commit phase");
-
-      if (this.readQuarantine.entrySet().stream().map(e -> {
-        MemoryCell<Object> memCell = e.getKey();
-        Object quarantinedVal = e.getValue();
-        Object currentVal = memCell.read(); // current actual contents
-        if (!currentVal.equals(quarantinedVal)) {
-          // memCell's value has been changed by some other transaction
-          return false;
-        }
-        return true;
-      }).filter(s -> !s).count() > 0) {
-        // Atleast one read set member has been modifed by another transaction, the data read is
-        // stale.
-        // Need to release all the ownerships and fail the commit phase so that the transaction can
-        // restart from the beginning.
-        logger.info("FAILED:: " + Thread.currentThread().getName() + " read inconsistent");
-        return false; // failed commit
-      }
-
-      // -- Second, after the read set members have been validated, the transaction is ready to
-      // flush
-      // its write-quarantined values. Then, it must release ownerships of all the write set
-      // members.
-      this.writeQuarantine.entrySet().forEach(e -> {
-        MemoryCell<Object> memCell = e.getKey();
-        Object val = e.getValue();
-        // logger.info("WRITING -- " + new Gson().toJson(val)); // debugging value being written
-        memCell.write(val);
-      });
-
-      logger.info(Thread.currentThread().getName() + " ends its commit phase");
-
-      return true; // commit was successful
+      
+      Boolean validationStatus = this.validateReadQuarantined();
+      
+      if (!validationStatus) return false;
+      
+      return this.flushWriteQuarantined();
     } finally {
-
-      // Release the commit lock on the STM
-      this.stm.getCommitLock().unlock();
+      
+      this.stm.releaseCommitLock();
+      
+      logger.info(Thread.currentThread().getName() + " ends its commit phase");
     }
+  }
+  
+  /**
+   * Validates the read quarantined members. The transaction fetches the current values of the memory cells.
+   * Then it compares the current values with its quarantined ones. If they match, the memory cell is validated.
+   * Otherwise, the memory cell is not valid and the validation fails.
+   * Incase the transaction doesn't find the memory cell, it will abort since the logic of its actions are no longer
+   * valid.
+   * 
+   * @return true if validated, else false.
+   */
+  private Boolean validateReadQuarantined() {
+    for (Map.Entry<MemoryCell, Value> member : this.readQuarantine.entrySet()) {
+      if (!this.stm.exists(member.getKey())) {
+        // for protection against deletion
+        this.shouldAbort = true;
+        return false;
+      }
+      Value currentValue = member.getKey().read();
+      Value quarantinedValue = member.getValue();
+      if (!quarantinedValue.equals(currentValue)) return false;
+    }
+    return true;
+  }
+  
+  /**
+   * Flushes the write quarantined values into the STM.
+   * 
+   * @return true if successfully flushed the values into the STM, else false.
+   */
+  private Boolean flushWriteQuarantined() {
+    for (Map.Entry<MemoryCell, Value> member : this.writeQuarantine.entrySet()) {
+      if (!this.stm.exists(member.getKey())) {
+        // for protection against deletion
+        this.shouldAbort = true;
+        return false;
+      }
+      member.getKey().write(member.getValue());
+    }
+    return true;
   }
 }

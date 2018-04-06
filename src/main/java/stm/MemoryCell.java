@@ -3,84 +3,77 @@
  * 
  * @author sidmishraw Last modified: Dec 17, 2017 2:59:20 PM
  */
+
 package stm;
 
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import com.google.gson.Gson;
-import stm.annotations.ReadLocking;
-import stm.annotations.WriteLocking;
+import com.google.gson.Gson; // just for pretty printing
 
 /**
  * The concrete implementation of the transactional variable. Internally it is a memory cell, a
  * member of the memory -- held in the STM. Each memory cell has data of type T and an unique ID --
- * UUID.
- * 
- * <p>
- * MemoryCell implements the TVar interface to prevent the consumer from accessing its features
+ * UUID. MemoryCell implements the TVar interface to prevent the consumer from accessing its features
  * directly. Furthermore, it's package scoped so that it is only accessible internally.
  * 
  * @author sidmishraw
- *
  *         Qualified Name: stm.MemoryCell
- *
  */
-class MemoryCell<T> implements TVar<T> {
-
-  // # For synchronized access to the memory cell - very granular
+class MemoryCell implements TVar {
+  
+  /**
+   * For synchronized access to the memory cell - very granular
+   */
   private ReentrantReadWriteLock memCellLock;
-  // # For synchronized access to the memory cell - very granular
-
+  
   /**
    * The identifier of the memory cell, it is a UUID of type 4
    */
   private UUID ID;
-
+  
   /**
    * Data contained in the memory cell
    */
-  private T data;
-
+  private Value data;
+  
   /**
    * Constructs a new memory cell
    * 
-   * @param data The data held in the memory cell
+   * @param data
+   *          The data held in the memory cell
    */
-  public MemoryCell(T data) {
+  public MemoryCell(Value data) {
     this.memCellLock = new ReentrantReadWriteLock();
     this.ID = UUID.randomUUID();
     this.data = data;
   }
-
+  
   /**
-   * Reads the data in the memory cell, only visible inside the stm package.
+   * Reads the data in the memory cell.
+   * This method is package scoped for security reasons.
    * 
-   * @InternalUsage
-   * 
-   * @return the copy of the data contained in the memory cell.
+   * @return The copy of the data contained in the memory cell.
    */
-  @ReadLocking
-  T read() {
-    T data = null;
+  Value read() {
+    Value data = null;
     try {
       this.memCellLock.readLock().lock();
-      data = this.data;
+      data = this.data.clone();
       return data;
     } finally {
       this.memCellLock.readLock().unlock();
     }
   }
-
+  
   /**
    * Writes the data into the memory cell.
+   * This method is package scoped for security reasons.
    * 
-   * @InternalUsage
-   * 
-   * @param newData the new data to be written into the memory cell
+   * @param newData
+   *          the new data to be written into the memory cell
    */
-  @WriteLocking
-  void write(T newData) {
+  void write(Value newData) {
     if (Objects.isNull(newData)) {
       return;
     }
@@ -91,10 +84,9 @@ class MemoryCell<T> implements TVar<T> {
       this.memCellLock.writeLock().unlock();
     }
   }
-
+  
   /*
    * (non-Javadoc)
-   * 
    * @see java.lang.Object#hashCode()
    */
   @Override
@@ -104,10 +96,9 @@ class MemoryCell<T> implements TVar<T> {
     result = prime * result + ((this.ID == null) ? 0 : this.ID.hashCode());
     return result;
   }
-
+  
   /*
    * (non-Javadoc)
-   * 
    * @see java.lang.Object#equals(java.lang.Object)
    */
   @Override
@@ -121,7 +112,7 @@ class MemoryCell<T> implements TVar<T> {
     if (!(obj instanceof MemoryCell)) {
       return false;
     }
-    MemoryCell<?> other = (MemoryCell<?>) obj;
+    MemoryCell other = (MemoryCell) obj;
     if (this.ID == null) {
       if (other.ID != null) {
         return false;
@@ -131,10 +122,9 @@ class MemoryCell<T> implements TVar<T> {
     }
     return true;
   }
-
+  
   /*
    * (non-Javadoc)
-   * 
    * @see java.lang.Object#toString()
    */
   @Override

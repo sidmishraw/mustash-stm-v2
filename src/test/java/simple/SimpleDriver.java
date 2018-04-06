@@ -5,84 +5,76 @@
  */
 package simple;
 
-import java.util.Arrays;
+import java.util.Scanner;
+import java.util.function.Function;
+
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import com.rits.cloning.Cloner;
+
 import stm.STM;
 import stm.TVar;
 import stm.Transaction;
+import stm.Value;
 
 /**
  * @author sidmishraw
- *
  *         Qualified Name: simple.SimpleDriver
- *
  */
 public class SimpleDriver {
-
+  
   /**
    * 
    */
-  private static final Logger logger = LoggerFactory.getLogger(SimpleDriver.class);
-
+  // private static final Logger logger = LoggerFactory.getLogger(SimpleDriver.class);
+  
   /**
    * My STM
    */
   private static final STM stm = new STM();
-
+  
   /**
-   * Makes a transaction that adds 1001 to the 3rd element of the array stored in a memory cell.
+   * Creates a transactional action that adds 1001 to the 3rd element of the TArray stored in a memory cell.
    * 
-   * @param tVar the memory cell containing the array
-   * @return the transaction
+   * @param tvar
+   *          The transactional variable holding the TArray.
+   * @return The transactional action.
    */
-  private static Transaction makeT1(TVar<Integer[]> tVar) {
-
-    Transaction transaction = Transaction.builder().stm(stm).action(t -> {
-
-      Integer[] arr = t.read(tVar); // read the contents of the tVar
-      arr[2] += 1001; // update the value
-
-      return t.write(tVar, arr); // write the contents to the tVar
-    }).action(t -> {
-      logger.info("Logging from the then clause!");
-
-      return true;
-    }).build();
-
-    return transaction;
+  private static Function<Transaction, Boolean> add1001(TVar tvar) {
+    return (t) -> {
+      TArray tArr = t.read(tvar, TArray.class);
+      tArr.data[2] += 1001;
+      return t.write(tvar, tArr);
+    };
   }
-
+  
   /**
-   * Makes a transaction that deducts 1000 from the 3rd element of the array stored in a memory
+   * Creates a transactional action that deducts 1000 from the 3rd element of the array stored in a memory
    * cell.
    * 
-   * @param tVar the memory cell containing the array
-   * @return the transaction
+   * @param tvar
+   *          The memory cell containing the array.
+   * @return The transactional action.
    */
-  private static Transaction makeT2(TVar<Integer[]> tVar) {
-
-    Transaction transaction = Transaction.builder().stm(stm).action(t -> {
-
-      Integer[] arr = t.read(tVar); // read the contents of the tVar
-      arr[2] -= 1000; // modify the 3rd element
-
-      return t.write(tVar, arr); // write the contents to the tVar
-    }).build();
-
-    return transaction;
+  private static Function<Transaction, Boolean> subtract1000(TVar tvar) {
+    return (t) -> {
+      TArray tarr = t.read(tvar, TArray.class);
+      tarr.data[2] -= 1000;
+      return t.write(tvar, tarr);
+    };
   }
-
+  
   /**
    * @param args
    */
+  @SuppressWarnings({ "unchecked" })
   public static void main(String[] args) {
-
+    
     // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
-    TVar<Integer[]> tVar = stm.newTVar(new Integer[] {1, 2, 3, 4, 5});
-
+    TVar tvar = stm.newTVar(new TArray(1, 2, 3, 4, 5));
+    
+    stm.printState();
+    
     // run the transactions
     // should add 1001 and deduct 3000
     // effectively, it must be 3 + 1001 - 3000 = -1996
@@ -93,28 +85,71 @@ public class SimpleDriver {
     // makeT2(tVar). Also, since transactions are threads, it makes sense to execute them again
     // after they are
     // done executing.
-    stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
-
-    // A logging transaction to check the contents of the tVar. It is a read-only transaction.
-    stm.exec(Transaction.builder().stm(stm).action(t -> {
-
-      Integer[] arr = t.read(tVar);
-      Arrays.asList(arr).forEach(e -> logger.info("member = " + e));
-
-      return true;
-    }).build());
+    stm.perform(add1001(tvar));
+    stm.perform(subtract1000(tvar));
+    
+    // stm.deleteTVar(tvar);
+    
+    stm.perform(subtract1000(tvar));
+    stm.perform(subtract1000(tvar));
+    
+    try (Scanner sc = new Scanner(System.in)) {
+      sc.nextLine();  // hold till input
+    }
+    
+    stm.printState();
   }
-
+  
   /**
    * Testing out the Java-Deep cloning library. The library uses reflection for deep cloning.
    */
   @Test
   public void testCloner() {
-    Integer[] arr = new Integer[] {1, 2, 3, 4, 5};
+    Integer[] arr = new Integer[] { 1, 2, 3, 4, 5 };
     Cloner cloner = new Cloner();
     Integer[] newArr = cloner.deepClone(arr);
     System.out.println("arr = " + arr);
     System.out.println("newArr = " + newArr);
     System.out.println("arr == newArr = " + newArr.equals(arr));
+  }
+}
+
+/**
+ * A sample value that can be stored in the STM.
+ * Qualified Name: simple.TArray
+ */
+class TArray implements Value {
+  Integer[] data;
+  
+  /**
+   * Creates a new TArray instance.
+   * 
+   * @param integers
+   *          The elements in the data.
+   */
+  public TArray(Integer... integers) {
+    this.data = integers;
+  }
+  
+  @Override
+  public Value clone() {
+    TArray ta = new TArray();
+    Integer[] arr = new Integer[this.data.length];
+    for (int i = 0; i < this.data.length; i++) {
+      arr[i] = this.data[i];
+    }
+    ta.data = arr;
+    return ta;
+  }
+  
+  @Override
+  public Boolean equals(Value v) {
+    if (!(v instanceof TArray)) return false;
+    TArray peer = (TArray) v;
+    if (peer.data.length != this.data.length) return false;
+    for (int i = 0; i < this.data.length; i++) {
+      if (this.data[i] != peer.data[i]) return false;
+    }
+    return true;
   }
 }

@@ -9,9 +9,6 @@ package stm;
  * The transactional variable with contents of type T.
  * 
  * @author sidmishraw
- *
  *         Qualified Name: stm.TVar
- *
  */
-public interface TVar<T> {
-}
+public interface TVar {}

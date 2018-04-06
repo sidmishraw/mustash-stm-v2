@@ -1,11 +1,19 @@
-# STM v2.0
+# STM v2.2
 
 Author: Sidharth Mishra
 
 
 ## Descripton
 
-This is a work in progress. More updates soon.
+A quarantined STM is different from the regular STM in the aspect that it uses two maps/tables for thread local quarantines.
+When the transaction needs to read the data from a memory cell, for the first read, the transaction reads the data directly from the memory cell.
+Then, it stores this data into its read quarantined map. All the subsequent reads happen from this read quarantine.
+Similarly, the when the transaction needs to write a value into a memory cell, it writes to its write quarantine. The actual data of the memory cell is updated during the commit phase.
+
+When the transaction enters its commit phase, it first acquires the commit lock on the STM. After acquiring the commit lock, it validates its read quarantine members by equating their thread local values with the actual values. Upon successful validation, it flushes its write set members into the STM.
+Finally, it releases the commit lock on the STM.
+
+All the threads run in complete isolation and their changes become visible to their peers at once when they successfully commit.
 
 
 ## Usage Examples
@@ -21,39 +29,107 @@ The sample usage is demonstrated in the [SimpleDriver.java](./src/test/java/simp
 private static final STM    stm    = new STM();
 ```
 
+* The values stored in a memory cell need to realize the `stm.Value` interface.
+For example, lets assume that we have a class called `TArray` which is a simulation for transactional integer array.
+
+```java
+
+/**
+ * A sample value that can be stored in the STM.
+ * Qualified Name: simple.TArray
+ */
+class TArray implements Value {
+
+  Integer[] data;
+  
+  /**
+   * Creates a new TArray instance.
+   * 
+   * @param integers
+   *          The elements in the data.
+   */
+  public TArray(Integer... integers) {
+    this.data = integers;
+  }
+  
+  @Override
+  public Value clone() {
+    TArray ta = new TArray();
+    Integer[] arr = new Integer[this.data.length];
+    for (int i = 0; i < this.data.length; i++) {
+      arr[i] = this.data[i];
+    }
+    ta.data = arr;
+    return ta;
+  }
+  
+  @Override
+  public Boolean equals(Value v) {
+    if (!(v instanceof TArray)) return false;
+    TArray peer = (TArray) v;
+    if (peer.data.length != this.data.length) return false;
+    for (int i = 0; i < this.data.length; i++) {
+      if (this.data[i] != peer.data[i]) return false;
+    }
+    return true;
+  }
+}
+
+```
+The `clone()` and `equals()` methods need to be implemented by the data that is intended to be stored in the memory cell.
+The `clone()` method ensures that there is no accidental modification of the contents of the memory cell during the transaction's execution.
+The `equal()` method is necessary to check the equality of the contents of the memory cell during the commit phase of the transaction.
+
+
 * Creating transactional variables (internally represented as memory cells):
 
 ```java
 // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
-TVar<Integer[]> tVar = stm.newTVar(new Integer[] { 1, 2, 3, 4, 5 });
+TVar tvar = stm.newTVar(new TArray(1, 2, 3, 4, 5));
 ```
 
-* Making transactions is simpler now.
+* The STM accepts `transactional actions` and processes them for us. The transactional actions are of the form `f :: Transaction -> Boolean` or
+`Function<Transaction, Boolean>`.
 
 ```java
-/**
- * Makes a transaction that adds 1001 to the 3rd element of the array stored in a memory cell.
- * 
- * @param tVar
- *            the memory cell containing the array
- * @return the transaction
- */
-private static Transaction makeT1(TVar<Integer[]> tVar) {
-    return Transactions.newT(stm).begin((t) -> {
-        Integer[] arr = t.read(tVar); // read the contents of the tVar
-        arr[2] += 1001; // update the value
-        return t.write(tVar, arr); // write the contents to the tVar
-    }).then(t -> {
-        logger.info("Logging from the then clause!");
-        return true;
-    }).end().done();
-}
+
+  /**
+   * Creates a transactional action that adds 1001 to the 3rd element of the TArray stored in a memory cell.
+   * 
+   * @param tvar
+   *          The transactional variable holding the TArray.
+   * @return The transactional action.
+   */
+  private static Function<Transaction, Boolean> add1001(TVar tvar) {
+    return (t) -> {
+      TArray tArr = t.read(tvar, TArray.class);
+      tArr.data[2] += 1001;
+      return t.write(tvar, tArr);
+    };
+  }
+  
+  /**
+   * Creates a transactional action that deducts 1000 from the 3rd element of the array stored in a memory
+   * cell.
+   * 
+   * @param tvar
+   *          The memory cell containing the array.
+   * @return The transactional action.
+   */
+  private static Function<Transaction, Boolean> subtract1000(TVar tvar) {
+    return (t) -> {
+      TArray tarr = t.read(tvar, TArray.class);
+      tarr.data[2] -= 1000;
+      return t.write(tvar, tarr);
+    };
+  }
 ```
+The STM internally generates a transaction to execute the transactional action.
 
-* Executing the transactions. Use `exec` to execute the transactions concurrently while making the parent thread wait for all the transactions to be done executing. Otherwise, use `forkAndExec` to fork and execute the transactions concurrently.
+* Using the `perform()` method of the STM, the transactional actions can be submitted to the STM. 
 
 ```java
-stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
+stm.perform(add1001(tvar));
 ```
 
 
@@ -66,6 +142,15 @@ stm.exec(makeT2(tVar), makeT1(tVar), makeT2(tVar), makeT2(tVar));
 * Eclipse/IntelliJ Idea + Project Lombok - used for boilerplate reduction
 
 * Java Deep Cloning Library - uses reflection to construct deep clones
+
+
+
+## Changelog v2.2 - only on branch - quarantined-and-fattened
+
+* Moved from a generics `MemoryCell<T>` into `Value`. This relieves the use of `deep cloner` library.
+
+* The `STM` class has been fattened with more responsiblity, the user no longer has the ability to create transactions.
+They only create transactional actions which are submitted to the `STM` to perform. 
 
 
 ## Changelog v2.1 - only on branch - without-ownerships
