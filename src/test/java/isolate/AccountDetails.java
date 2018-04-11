@@ -22,89 +22,42 @@
  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * TArray.java
+ * AccountDetails.java
  * 
  * @author Sidharth Mishra <sidmishraw@gmail.com>
- * @created Apr 7, 2018 12:17:08 PM
+ * @created Apr 10, 2018 1:29:58 PM
  */
-package examples;
+package isolate;
 
-import com.google.gson.Gson;
+import java.util.UUID;
 
-import stm.Value;
+import lombok.Getter;
 
 /**
- * Qualified Name: examples.TArray
+ * The identity information about the account. It is immutable.
+ * Qualified Name: isolate.AccountDetails
  */
-public class TArray implements Value {
+public class AccountDetails extends Identity {
   
   /**
-   * The items being contained by this container.
+   * The unique identifier of the account. Generated from UUID 4.
    */
-  private Integer[] data;
+  private @Getter String ID;
   
   /**
-   * @return the data
+   * The name of the account.
    */
-  public Integer[] getData() {
-    return this.data;
-  }
+  private @Getter String name;
   
   /**
-   * Creates a TArray container with the items.
+   * The account details.
    * 
-   * @param items
-   *          The items to be contained by this TArray container.
+   * @param name
+   *          The name of the account.
    */
-  public TArray(Integer... items) {
-    this.data = items;
-  }
-  
-  /**
-   * Adds 1001 to the 3rd element of this container if it exists, else does nothing.
-   */
-  public synchronized void add1001() {
-    if (data.length < 3) return;
-    this.data[2] = this.data[2] + 1001;
-  }
-  
-  /**
-   * Subtracts 1000 from the 3rd element of this container if it exists, else does nothing.
-   */
-  public void sub1000() {
-    if (data.length < 3) return;
-    this.data[2] = this.data[2] - 1000;
-  }
-  
-  /*
-   * (non-Javadoc)
-   * @see java.lang.Object#toString()
-   */
-  @Override
-  public String toString() {
-    return new Gson().toJson(this.data);
-  }
-  
-  @Override
-  public Value makeCopy() {
-    TArray ta = new TArray();
-    Integer[] arr = new Integer[this.data.length];
-    for (int i = 0; i < this.data.length; i++) {
-      arr[i] = this.data[i];
-    }
-    ta.data = arr;
-    return ta;
-  }
-  
-  @Override
-  public Boolean isEqual(Value v) {
-    if (!(v instanceof TArray)) return false;
-    TArray peer = (TArray) v;
-    if (peer.data.length != this.data.length) return false;
-    for (int i = 0; i < this.data.length; i++) {
-      if (this.data[i] != peer.data[i]) return false;
-    }
-    return true;
+  public AccountDetails(String name) {
+    this.ID = UUID.randomUUID().toString();
+    this.name = name;
   }
   
 }

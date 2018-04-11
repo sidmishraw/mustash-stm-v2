@@ -9,15 +9,20 @@ package stm;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import com.google.gson.Gson; // just for pretty printing
+
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.GsonBuilder;
 
 /**
- * The concrete implementation of the transactional variable. Internally it is a memory cell, a
- * member of the memory -- held in the STM. Each memory cell has data of type T and an unique ID --
- * UUID. MemoryCell implements the TVar interface to prevent the consumer from accessing its features
- * directly. Furthermore, it's package scoped so that it is only accessible internally.
+ * The concrete implementation of the transactional variable. Internally it is a
+ * memory cell, a member of the memory -- held in the STM. Each memory cell has data of type T
+ * and an unique ID -- UUID. MemoryCell implements the TVar interface to prevent the consumer from
+ * accessing its features directly. Furthermore, it's package scoped so that it is only accessible
+ * internally.
  * 
  * @author sidmishraw
+ * 
  *         Qualified Name: stm.MemoryCell
  */
 class MemoryCell implements TVar {
@@ -59,7 +64,7 @@ class MemoryCell implements TVar {
     Value data = null;
     try {
       this.memCellLock.readLock().lock();
-      data = this.data.clone();
+      data = this.data.makeCopy();
       return data;
     } finally {
       this.memCellLock.readLock().unlock();
@@ -129,6 +134,26 @@ class MemoryCell implements TVar {
    */
   @Override
   public String toString() {
-    return new Gson().toJson(this);
+    
+    return new GsonBuilder().setExclusionStrategies(new ExclusionStrategy() {
+      
+      @Override
+      public boolean shouldSkipField(FieldAttributes f) {
+        
+        switch (f.getName()) {
+          case "memCellLock":
+            return true;
+          default:
+            return false;
+        }
+        
+      }
+      
+      @Override
+      public boolean shouldSkipClass(Class<?> clazz) {
+        return false;
+      }
+    }).create().toJson(this);
+    
   }
 }

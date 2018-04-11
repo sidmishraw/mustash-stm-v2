@@ -15,9 +15,13 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.GsonBuilder;
+
 /**
- * The shared memory object that behaves like a memory whose addresses/cells can be operated by
- * transactions.
+ * The shared memory object that behaves like a memory whose addresses/cells can
+ * be operated by transactions.
  * 
  * @author sidmishraw
  *         Qualified Name: stm.STM
@@ -32,10 +36,12 @@ public class STM {
   private List<MemoryCell> memory;
   
   /**
-   * Lock that is used for synchronizing commit phases of transactions. This lock ensures the transactions are
-   * SERIALIZED because the second requirement of the STM is serializability.
-   * This lock must be taken before the ownership acquiring phase of the commit phase. The lock is released after commit
-   * phase.
+   * Lock that is used for synchronizing commit phases of transactions. This lock
+   * ensures the transactions are SERIALIZED because the second requirement of the STM is
+   * serializability.
+   * 
+   * This lock must be taken before the ownership acquiring phase of the commit
+   * phase. The lock is released after commit phase.
    */
   private ReentrantLock commitLock;
   
@@ -62,8 +68,8 @@ public class STM {
   }
   
   /**
-   * Makes a new transactional variable holding the provided data. Internally it is a memory cell
-   * containing the data.
+   * Makes a new transactional variable holding the provided data. Internally it
+   * is a memory cell containing the data.
    * 
    * @param data
    *          The data to be put into the transactional variable or memory cell.
@@ -76,13 +82,16 @@ public class STM {
   }
   
   /**
-   * Removes the transactional variable from the memory. The transactions trying to access this deleted
-   * transactional variable need to take special care. They should abort the moment they encounter this variable.
-   * Basically, these transactions are invalidated since they are trying to operate on memory that doesn't exist
-   * anymore.
+   * Removes the transactional variable from the memory. The transactions trying
+   * to access this deleted transactional variable need to take special care. They should abort the
+   * moment they encounter this variable.
+   * 
+   * Basically, these transactions are invalidated since they are trying to
+   * operate on memory that doesn't exist anymore.
    * 
    * @param tVar
    *          The transactional variable to get rid off.
+   * 
    * @return The status of the removal operation.
    */
   public Boolean deleteTVar(TVar tVar) {
@@ -91,10 +100,12 @@ public class STM {
   }
   
   /**
-   * Checks if the transactional variable is still valid -- it exists in the memory and hasn't been deleted.
+   * Checks if the transactional variable is still valid -- it exists in the
+   * memory and hasn't been deleted.
    * 
    * @param tVar
    *          The transactional variable in question.
+   * 
    * @return true if it exists in the memory, else false.
    */
   Boolean exists(TVar tVar) {
@@ -115,17 +126,27 @@ public class STM {
   }
   
   /**
-   * Prints the state of all the memory cells of the STM. To be used for debugging only.
-   * 
-   * @InternalUsage
+   * Prints the state of all the memory cells of the STM. To be used for debugging
+   * only.
    */
   public void printState() {
-    StringBuffer buffer = new StringBuffer();
-    buffer.append("HARMLESS :: LOGGING STATE :: [");
-    this.memory.forEach(m -> {
-      buffer.append(m.toString()).append("  ");
-    });
-    buffer.append("]");
-    logger.debug(buffer.toString());
+    
+    String stateString = new GsonBuilder().setExclusionStrategies(new ExclusionStrategy() {
+      
+      @Override
+      public boolean shouldSkipField(FieldAttributes f) {
+        if (f.getName().equals("commitLock")) return true;
+        if (f.getName().equals("memCellLock")) return true;
+        return false;
+      }
+      
+      @Override
+      public boolean shouldSkipClass(Class<?> clazz) {
+        return false;
+      }
+    }).setPrettyPrinting().create().toJson(this);
+    
+    logger.debug("HARMLESS :: DEBUGGING STATE :: " + stateString);
+    
   }
 }

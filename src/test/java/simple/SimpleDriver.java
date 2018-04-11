@@ -132,7 +132,7 @@ class TArray implements Value {
   }
   
   @Override
-  public Value clone() {
+  public Value makeCopy() {
     TArray ta = new TArray();
     Integer[] arr = new Integer[this.data.length];
     for (int i = 0; i < this.data.length; i++) {
@@ -143,7 +143,7 @@ class TArray implements Value {
   }
   
   @Override
-  public Boolean equals(Value v) {
+  public Boolean isEqual(Value v) {
     if (!(v instanceof TArray)) return false;
     TArray peer = (TArray) v;
     if (peer.data.length != this.data.length) return false;
