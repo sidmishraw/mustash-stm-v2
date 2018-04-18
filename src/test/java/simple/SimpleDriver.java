@@ -5,10 +5,13 @@
  */
 package simple;
 
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.function.Function;
 
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.rits.cloning.Cloner;
 
@@ -26,7 +29,7 @@ public class SimpleDriver {
   /**
    * 
    */
-  // private static final Logger logger = LoggerFactory.getLogger(SimpleDriver.class);
+  private static final Logger logger = LoggerFactory.getLogger(SimpleDriver.class);
   
   /**
    * My STM
@@ -34,7 +37,8 @@ public class SimpleDriver {
   private static final STM stm = new STM();
   
   /**
-   * Creates a transactional action that adds 1001 to the 3rd element of the TArray stored in a memory cell.
+   * Creates a transactional action that adds 1001 to the 3rd element of the TArray stored in a
+   * memory cell.
    * 
    * @param tvar
    *          The transactional variable holding the TArray.
@@ -49,7 +53,8 @@ public class SimpleDriver {
   }
   
   /**
-   * Creates a transactional action that deducts 1000 from the 3rd element of the array stored in a memory
+   * Creates a transactional action that deducts 1000 from the 3rd element of the array stored in a
+   * memory
    * cell.
    * 
    * @param tvar
@@ -71,11 +76,13 @@ public class SimpleDriver {
   public static void main(String[] args) {
     
     // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
+    //
     TVar tvar = stm.newTVar(new TArray(1, 2, 3, 4, 5));
     
     stm.printState();
     
-    // run the transactions
+    // Run the transactions
+    //
     // should add 1001 and deduct 3000
     // effectively, it must be 3 + 1001 - 3000 = -1996
     // Note: make sure not to run the same transaction run multiple times. That might cause shared
@@ -85,10 +92,13 @@ public class SimpleDriver {
     // makeT2(tVar). Also, since transactions are threads, it makes sense to execute them again
     // after they are
     // done executing.
+    //
     stm.perform(add1001(tvar));
     stm.perform(subtract1000(tvar));
     
-    // stm.deleteTVar(tvar);
+    // delete the tVar and invalidate the transactional actions
+    //
+    stm.deleteTVar(tvar);
     
     stm.perform(subtract1000(tvar));
     stm.perform(subtract1000(tvar));
@@ -98,6 +108,12 @@ public class SimpleDriver {
     }
     
     stm.printState();
+    
+    // The memory cell has been removed from the STM and cannot be used further.
+    // However, the tvar still refers to it. So, as soon as tvar goes out of scope
+    // the old memory cell can be reclaimed by the garbage collector.
+    //
+    logger.info("tvar = " + (Objects.isNull(tvar) ? "null" : tvar.toString()));
   }
   
   /**

@@ -98,7 +98,7 @@ public final class Transaction implements Runnable {
    * Creates a new transaction for the given STM.
    * 
    * @param stm
-   *          the STM object that the transaction operates on.
+   *          The STM object that the transaction operates on.
    */
   @Builder
   Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
@@ -149,7 +149,7 @@ public final class Transaction implements Runnable {
     }
     
     // this.stm.printState(); // for debugging
-    //
+    
     if (this.shouldAbort) {
       logger.info(Thread.currentThread().getName() + " has been invalidated!");
       this.isComplete = true;
@@ -269,7 +269,6 @@ public final class Transaction implements Runnable {
       
     }
   }
-  // # Transactional Operation related
   
   /**
    * Executes all the actions of the transaction in-order. Returns true if all
