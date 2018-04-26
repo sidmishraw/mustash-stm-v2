@@ -25,37 +25,37 @@ import monad.STMAction;
  *
  */
 public final class Transaction implements Runnable {
-
+  
   // # For logging
   private static final Logger logger = LoggerFactory.getLogger(Transaction.class);
   // # For logging
-
+  
   /**
    * The latch used for holding the invoking thread (main-thread) till this transaction is done
    * computing.
    */
   private CountDownLatch latch;
-
+  
   // ==================================================================================================================================
   // # Metadata
-
+  
   /**
    * Denotes the version number of the transaction. It is the number of times the transaction has
    * completed execution successfully. It is updated after every successful run.
    */
   @Getter
   private int version;
-
+  
   /**
    * A boolean flag that indicates if the transaction has completed execution successfully.
    */
   @Getter
   private boolean isComplete;
-
+  
   // ================================================================================================================
   // # thread local quarantines
   // =====================================================================================
-
+  
   /**
    * The {@link Transaction}{@link #quarantine} indicates the thread local storage. This map holds
    * the values of the memory cells before the transaction commits. If the transaction commits
@@ -65,48 +65,50 @@ public final class Transaction implements Runnable {
    * In earlier versions, I used to call this map as `oldValues`. But, the name doesn't suit its
    * purpose.
    */
-
+  
   /**
    * The set of memory cells that the transaction intends to read from. The transaction will only
    * read from the memory cell once. Then, it will add the contents of the memory cell into the
    * readQuarantine. All subsequent reads will take place from the readQuarantine.
    */
   private Map<MemoryCell<Object>, Object> readQuarantine;
-
+  
   /**
    * The set of memory cells that the transaction intends to write to. The transaction writes the
    * new data into the write quarantine. The memory cell is updated only after all the actions of
    * the transaction have been thoroughly validated.
    */
   private Map<MemoryCell<Object>, Object> writeQuarantine;
-
+  
   // # thread local quarantines
   // =====================================================================================
   // ================================================================================================================
-
+  
   // # Metadata
   // ==================================================================================================================================
-
+  
   /**
    * The reference to the STM object the transaction operates upon.
    */
   private STM stm;
-
+  
   // ==================================================================================================================================
-
+  
   /**
    * The STM action that the transaction performs.
    */
   @Setter
   private Function<Transaction, STMAction<Boolean>> action;
-
+  
   // ==================================================================================================================================
-
+  
   /**
    * Creates a new transaction.
    * 
-   * @param stm The STM that the transaction intends to modify.
-   * @param action The STM action that needs to be performed by the transaction.
+   * @param stm
+   *          The STM that the transaction intends to modify.
+   * @param action
+   *          The STM action that needs to be performed by the transaction.
    */
   @Builder
   private Transaction(STM stm, Function<Transaction, STMAction<Boolean>> action) {
@@ -127,12 +129,11 @@ public final class Transaction implements Runnable {
     this.isComplete = false;
     this.version = 0;
   }
-
+  
   // ==================================================================================================================================
-
+  
   /*
    * (non-Javadoc)
-   * 
    * @see java.lang.Runnable#run()
    */
   @Override
@@ -147,8 +148,7 @@ public final class Transaction implements Runnable {
       //
       // 1. execute actions
       //
-      if ((Objects.isNull(this.action))
-          || (!Objects.isNull(this.action) && !this.action.apply(this).unwrap())) {
+      if ((Objects.isNull(this.action)) || (!Objects.isNull(this.action) && !this.action.apply(this).unwrap())) {
         // execution of actions failed, the transaction needs to rollback and start from the
         // beginning
         logger.info(Thread.currentThread().getName() + " failed to execute, hence rolling back");
@@ -181,26 +181,27 @@ public final class Transaction implements Runnable {
     this.version = this.version + 1; // increment the version
     this.latch.countDown(); // signal the calling thread that this is done
   }
-
+  
   /**
    * Runs transaction with a latch so that the parent thread will wait for the transaction to end
    * execution.
    * 
-   * @param latch the latch on which the parent thread will await
+   * @param latch
+   *          the latch on which the parent thread will await
    */
   public void go(CountDownLatch latch) {
     this.latch = latch;
     Thread currentThread = new Thread(this);
     currentThread.start();
   }
-
+  
   // ==================================================================================================================
   // # Transactional Operation related
-
+  
   //
   // READ
   //
-
+  
   /**
    * Reads the contents of the transactional variable or memory cell. It returns a deep clone or
    * copy of the original contents so that there is no accidental modification by the consumer
@@ -208,7 +209,8 @@ public final class Transaction implements Runnable {
    * 
    * Note: The clone or copy is a deep copy of the contents.
    * 
-   * @param tVar The transactional variable or memory cell to read contents from.
+   * @param tVar
+   *          The transactional variable or memory cell to read contents from.
    * 
    * @return An STM action that when performed returns the contents of the transactional variable or
    *         memory cell.
@@ -268,16 +270,18 @@ public final class Transaction implements Runnable {
       }
     });
   }
-
+  
   //
   // WRITE
   //
-
+  
   /**
    * Writes the data to the memory cell.
    * 
-   * @param tVar The transactional variable or memory cell to write into.
-   * @param newData The new data to be written.
+   * @param tVar
+   *          The transactional variable or memory cell to write into.
+   * @param newData
+   *          The new data to be written.
    * 
    * @return An STM action which when performed will return the status of the write operation, true
    *         means success, false means failure.
@@ -306,10 +310,10 @@ public final class Transaction implements Runnable {
       }
     });
   }
-
+  
   // # Transactional Operation related
   // ==================================================================================================================
-
+  
   /**
    * Re-initializes the readQuarantine and the writeQuarantine so that the transaction can retry
    * from the beginning.
@@ -318,7 +322,7 @@ public final class Transaction implements Runnable {
     this.readQuarantine = new HashMap<>();
     this.writeQuarantine = new HashMap<>();
   }
-
+  
   /**
    * The commit phase of the transaction. In this phase, the transaction validates its quarantined
    * values and posts the values of its write set members. The values of the read set members are

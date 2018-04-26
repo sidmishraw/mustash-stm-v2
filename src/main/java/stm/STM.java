@@ -26,15 +26,15 @@ import monad.STMAction;
  *
  */
 public class STM {
-
+  
   // region [For logging]
   private static final Logger logger = LoggerFactory.getLogger(STM.class);
   // region [For logging]
-
+  
   //
   // STM LOCK
   //
-
+  
   /**
    * Lock that is used for synchronizing commit phases of transactions. This lock ensures ISOLATION
    * and ATOMICITY are maintained. This lock must be taken before the ownership acquiring phase of
@@ -43,16 +43,16 @@ public class STM {
    * @InternalUsage
    */
   private @Getter(AccessLevel.PACKAGE) ReentrantLock commitLock;
-
+  
   //
   // MEMORY
   //
-
+  
   /**
    * The memory cells or the Memory vector
    */
   private List<MemoryCell<?>> memory;
-
+  
   /**
    * Makes a new STM.
    */
@@ -60,16 +60,17 @@ public class STM {
     this.memory = new ArrayList<>();
     this.commitLock = new ReentrantLock();
   }
-
+  
   // ========================================================================================================================
   // # Memcell related
   // ==============================================================================================
-
+  
   /**
    * Makes a new transactional variable holding the provided data. Internally it is a memory cell
    * containing the data.
    * 
-   * @param data The data to be put into the transactional variable or memory cell.
+   * @param data
+   *          The data to be put into the transactional variable or memory cell.
    * 
    * @return An STM action that when performed returns the transactional variable or memory cell
    *         holding the data.
@@ -81,15 +82,15 @@ public class STM {
       return memCell;
     });
   }
-
+  
   // # Memcell related
   // ==============================================================================================
   // ========================================================================================================================
-
+  
   // ========================================================================================================================
   // # transaction execution strategies
   // ===========================================================================
-
+  
   /**
    * Executes all the transactions concurrently and makes the main-thread or parent thread wait till
    * all of the transactions are done executing.
@@ -97,7 +98,8 @@ public class STM {
    * Note: Having this as a member of the STM object reduces the risk for executing transactions in
    * some other STM object's context.
    * 
-   * @param ts The transactions to execute concurrently.
+   * @param ts
+   *          The transactions to execute concurrently.
    */
   public void exec(Transaction... ts) {
     //
@@ -122,14 +124,15 @@ public class STM {
       logger.error(e.getMessage());
     }
   }
-
+  
   /**
    * Executes the transactions concurrently without making their parent (main-thread) wait till all
    * of them are done executing.
    * 
    * See also {@linkplain STM#exec(Transaction...)}
    * 
-   * @param ts The transactions to execute concurrently
+   * @param ts
+   *          The transactions to execute concurrently
    */
   public void forkAndExec(Transaction... ts) {
     new Thread(() -> {
@@ -160,11 +163,11 @@ public class STM {
       }
     }).start();
   }
-
+  
   // # transaction execution strategies
   // ===========================================================================
   // ========================================================================================================================
-
+  
   /**
    * Prints the state of all the memory cells of the STM. To be used for debugging only.
    * 
