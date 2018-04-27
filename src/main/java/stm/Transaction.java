@@ -6,12 +6,10 @@
 package stm;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.Singular;
 
 /**
  * The transaction is the only way to modify the state being managed by the STM.
@@ -90,24 +87,26 @@ public final class Transaction implements Runnable {
   private STM stm;
   
   /**
-   * The list of all the actions to be performed by the transaction in sequence.
+   * The transactional action to be performed by the transaction.
    */
-  private List<Function<Transaction, Boolean>> actions;
+  private Function<Transaction, STMAction<Boolean>> action;
   
   /**
    * Creates a new transaction for the given STM.
    * 
    * @param stm
    *          The STM object that the transaction operates on.
+   * @param action
+   *          The transactional action this transaction performs.
    */
   @Builder
-  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
+  Transaction(STM stm, Function<Transaction, STMAction<Boolean>> action) {
     this.version = 0;
     this.isComplete = false;
     this.readQuarantine = new HashMap<>();
     this.writeQuarantine = new HashMap<>();
     this.stm = stm;
-    this.actions = actions;
+    this.action = action;
     this.shouldAbort = false;
   }
   
@@ -126,7 +125,7 @@ public final class Transaction implements Runnable {
       
       // 1. execute actions
       //
-      if (!this.executeActions()) {
+      if (!this.action.apply(this).unwrap()) {
         // execution of actions failed, the transaction needs to rollback and start from
         // the beginning
         //
@@ -194,40 +193,43 @@ public final class Transaction implements Runnable {
    * @param classz
    *          The concrete type for the Value.
    * 
-   * @return The concrete value.
+   * @return An STMAction which when performed will return the concrete value.
    */
-  public <T> T read(TVar tVar, Class<T> classz) {
+  public <T> STMAction<T> read(TVar tVar, Class<T> classz) {
     
-    try {
+    return new STMAction<>(() -> {
       
-      // The null check!
-      //
-      if (Objects.isNull(tVar)) return null;
-      
-      Value data = null;
-      
-      // Inspired by S.P Jones' log based approach to the STM's actions,
-      // the read action will read the value from the memory cell for the first time
-      // and then it will `quarantine` that value -- store it in the quarantine map --
-      // and then, the subsequent reads for the transaction will all come from the
-      // quarantined memory cell.
-      //
-      if (Objects.isNull(this.readQuarantine.get((MemoryCell) tVar))) {
-        data = ((MemoryCell) tVar).read();
-        this.readQuarantine.put((MemoryCell) tVar, data);
-      } else {
-        data = this.readQuarantine.get((MemoryCell) tVar);
+      try {
+        
+        // The null check!
+        //
+        if (Objects.isNull(tVar)) return null;
+        
+        Value data = null;
+        
+        // Inspired by S.P Jones' log based approach to the STM's actions,
+        // the read action will read the value from the memory cell for the first time
+        // and then it will `quarantine` that value -- store it in the quarantine map --
+        // and then, the subsequent reads for the transaction will all come from the
+        // quarantined memory cell.
+        //
+        if (Objects.isNull(this.readQuarantine.get((MemoryCell) tVar))) {
+          data = ((MemoryCell) tVar).read();
+          this.readQuarantine.put((MemoryCell) tVar, data);
+        } else {
+          data = this.readQuarantine.get((MemoryCell) tVar);
+        }
+        
+        return classz.cast(data.makeCopy());
+        
+      } catch (Exception e) {
+        
+        logger.error(e.getMessage(), e);
+        
+        return null;
+        
       }
-      
-      return classz.cast(data.makeCopy());
-      
-    } catch (Exception e) {
-      
-      logger.error(e.getMessage(), e);
-      
-      return null;
-      
-    }
+    });
   }
   
   /**
@@ -243,56 +245,34 @@ public final class Transaction implements Runnable {
    * @param newData
    *          The new data to be written
    * 
-   * @return The status of the write operation, true means success, false means
-   *         failure.
+   * @return An STMAction which when performed will return the status of the write operation, true
+   *         means success, false means failure.
    */
-  public boolean write(TVar tVar, Value newData) {
+  public STMAction<Boolean> write(TVar tVar, Value newData) {
     
-    try {
+    return new STMAction<>(() -> {
       
-      // Inspired by S.P. Jones' log based approach, the newData is written to the
-      // quarantine.
-      //
-      // The final quarantined value is written into the tVar during the commit phase
-      // of the transaction. The transaction writes to the memory cell only after a thorough
-      // validation.
-      //
-      this.writeQuarantine.put((MemoryCell) tVar, newData);
-      
-      return true;
-      
-    } catch (Exception e) {
-      
-      logger.error(e.getMessage(), e);
-      
-      return false;
-      
-    }
-  }
-  
-  /**
-   * Executes all the actions of the transaction in-order. Returns true if all
-   * actions executed successfully otherwise, returns false.
-   * 
-   * @return The result of the execution.
-   */
-  private boolean executeActions() {
-    
-    // logger.info("Executing Actions");
-    
-    // generate the stats for all the actions of this transaction.
-    //
-    List<Boolean> stats = this.actions.stream().map(action -> action.apply(this)).collect(Collectors.toList());
-    
-    // filter out failed actions
-    //
-    List<Boolean> res = stats.stream().filter(stat -> !stat).collect(Collectors.toList());
-    
-    if (res.size() > 0) {
-      return false; // atleast one operation has failed
-    }
-    
-    return true;
+      try {
+        
+        // Inspired by S.P. Jones' log based approach, the newData is written to the
+        // quarantine.
+        //
+        // The final quarantined value is written into the tVar during the commit phase
+        // of the transaction. The transaction writes to the memory cell only after a thorough
+        // validation.
+        //
+        this.writeQuarantine.put((MemoryCell) tVar, newData);
+        
+        return true;
+        
+      } catch (Exception e) {
+        
+        logger.error(e.getMessage(), e);
+        
+        return false;
+        
+      }
+    });
   }
   
   /**

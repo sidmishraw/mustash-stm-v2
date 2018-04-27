@@ -2,10 +2,12 @@
 
 Author: Sidharth Mishra
 
+---- Documentation needs to rewritten -------
 
 ## Descripton
 
-A quarantined STM is different from the regular STM in the aspect that it uses two maps/tables for thread local quarantines.
+A monadic quarantined STM (m-QSTM) is different from the regular STM in the aspect that it uses two maps/tables for thread local quarantines and the STM specific actions are explicit actions following the monad pattern.
+
 When the transaction needs to read the data from a memory cell, for the first read, the transaction reads the data directly from the memory cell.
 Then, it stores this data into its read quarantined map. All the subsequent reads happen from this read quarantine.
 Similarly, the when the transaction needs to write a value into a memory cell, it writes to its write quarantine. The actual data of the memory cell is updated during the commit phase.

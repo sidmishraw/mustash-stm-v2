@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import com.rits.cloning.Cloner;
 
 import stm.STM;
+import stm.STMAction;
 import stm.TVar;
 import stm.Transaction;
 import stm.Value;
@@ -44,12 +45,13 @@ public class SimpleDriver {
    *          The transactional variable holding the TArray.
    * @return The transactional action.
    */
-  private static Function<Transaction, Boolean> add1001(TVar tvar) {
-    return (t) -> {
-      TArray tArr = t.read(tvar, TArray.class);
+  private static Function<Transaction, STMAction<Boolean>> add1001(TVar tvar) {
+    
+    return t -> t.read(tvar, TArray.class).bind(tArr -> {
       tArr.data[2] += 1001;
       return t.write(tvar, tArr);
-    };
+    });
+    
   }
   
   /**
@@ -61,12 +63,13 @@ public class SimpleDriver {
    *          The memory cell containing the array.
    * @return The transactional action.
    */
-  private static Function<Transaction, Boolean> subtract1000(TVar tvar) {
-    return (t) -> {
-      TArray tarr = t.read(tvar, TArray.class);
+  private static Function<Transaction, STMAction<Boolean>> subtract1000(TVar tvar) {
+    
+    return t -> t.read(tvar, TArray.class).bind(tarr -> {
       tarr.data[2] -= 1000;
       return t.write(tvar, tarr);
-    };
+    });
+    
   }
   
   /**
@@ -77,7 +80,7 @@ public class SimpleDriver {
     
     // let my STM store an array of 5 ints [1,2,3,4,5] in one of its memory cells
     //
-    TVar tvar = stm.newTVar(new TArray(1, 2, 3, 4, 5));
+    TVar tvar = stm.newTVar(new TArray(1, 2, 3, 4, 5)).unwrap();
     
     stm.printState();
     
@@ -98,7 +101,7 @@ public class SimpleDriver {
     
     // delete the tVar and invalidate the transactional actions
     //
-    stm.deleteTVar(tvar);
+    stm.deleteTVar(tvar).unwrap(); // explit effect
     
     stm.perform(subtract1000(tvar));
     stm.perform(subtract1000(tvar));

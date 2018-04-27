@@ -38,6 +38,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import stm.STM;
+import stm.STMAction;
 import stm.TVar;
 import stm.Transaction;
 
@@ -91,7 +92,7 @@ public class Account {
     
     this.stm = stm;
     
-    this.accountState = this.stm.newTVar(new AccountState(initialBalance));
+    this.accountState = this.stm.newTVar(new AccountState(initialBalance)).unwrap();
     
   }
   
@@ -104,14 +105,13 @@ public class Account {
   @SuppressWarnings("unchecked")
   public void deposit(Integer amount) {
     
-    this.stm.perform((Transaction t) -> {
-      
-      AccountState as = t.read(this.accountState, AccountState.class);
+    this.stm.perform((Transaction t) -> t.read(this.accountState, AccountState.class).bind(as -> {
       
       as.deposit(amount);
       
       return t.write(this.accountState, as);
-    });
+      
+    }));
     
   }
   
@@ -124,9 +124,7 @@ public class Account {
   @SuppressWarnings("unchecked")
   public void withdraw(Integer amount) {
     
-    this.stm.perform((Transaction t) -> {
-      
-      AccountState as = t.read(this.accountState, AccountState.class);
+    this.stm.perform((Transaction t) -> t.read(this.accountState, AccountState.class).bind(as -> {
       
       try {
         
@@ -136,10 +134,11 @@ public class Account {
         
       } catch (Exception e) {
         
-        return false;
+        return new STMAction<Boolean>(() -> false);
         
       }
-    });
+      
+    }));
     
   }
   
@@ -154,28 +153,26 @@ public class Account {
   @SuppressWarnings("unchecked")
   public void transfer(Account destination, Integer amt) {
     
-    this.stm.perform((Transaction t) -> {
-      
-      AccountState srcState = t.read(this.accountState, AccountState.class);
-      AccountState destState = t.read(destination.accountState, AccountState.class);
-      
-      try {
-        
-        srcState.withdraw(amt);
-        destState.deposit(amt);
-        
-        Boolean status = t.write(this.accountState, srcState);
-        status = status && t.write(destination.accountState, destState);
-        
-        return status;
-        
-      } catch (Exception e) {
-        
-        return false;
-        
-      }
-      
-    });
+    this.stm.perform((Transaction t) ->
+    
+    t.read(this.accountState, AccountState.class).bind(srcState -> t.read(destination.accountState, AccountState.class)
+        .bind(destState -> {
+          
+          try {
+            
+            srcState.withdraw(amt);
+            destState.deposit(amt);
+            
+            return t.write(this.accountState, srcState).bind(status1 -> t.write(destination.accountState, destState)
+                .bind(status2 -> new STMAction<Boolean>(() -> (status1 && status2))));
+            
+          } catch (Exception e) {
+            
+            return new STMAction<Boolean>(() -> false);
+            
+          }
+          
+        })));
     
   }
   

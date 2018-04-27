@@ -73,12 +73,17 @@ public class STM {
    * 
    * @param data
    *          The data to be put into the transactional variable or memory cell.
-   * @return The transactional variable or memory cell holding the data
+   * @return An STMAction which when performed will return the transactional variable or memory cell
+   *         holding the data.
    */
-  public TVar newTVar(Value data) {
-    MemoryCell memCell = new MemoryCell(data);
-    this.memory.add(memCell);
-    return memCell;
+  public STMAction<TVar> newTVar(Value data) {
+    
+    return new STMAction<>(() -> {
+      MemoryCell memCell = new MemoryCell(data);
+      this.memory.add(memCell);
+      
+      return memCell;
+    });
   }
   
   /**
@@ -92,11 +97,15 @@ public class STM {
    * @param tVar
    *          The transactional variable to get rid off.
    * 
-   * @return The status of the removal operation.
+   * @return An STMAction which when performed will return the status of the removal operation.
    */
-  public Boolean deleteTVar(TVar tVar) {
-    MemoryCell memCell = (MemoryCell) tVar; // get the concrete memory cell
-    return this.memory.remove(memCell);
+  public STMAction<Boolean> deleteTVar(TVar tVar) {
+    
+    return new STMAction<>(() -> {
+      MemoryCell memCell = (MemoryCell) tVar; // get the concrete memory cell
+      
+      return this.memory.remove(memCell);
+    });
   }
   
   /**
@@ -113,16 +122,19 @@ public class STM {
   }
   
   /**
-   * The STM spins up a transaction to perform the actions.
+   * The STM spins up transactions to perform the actions.
    * 
    * @param actions
    *          The actions to perform transactionally.
    */
   @SuppressWarnings("unchecked")
-  public void perform(Function<Transaction, Boolean>... actions) {
-    List<Function<Transaction, Boolean>> transactionalActions = Arrays.asList(actions);
-    Transaction t = Transaction.builder().stm(this).actions(transactionalActions).build();
-    t.execute();
+  public void perform(Function<Transaction, STMAction<Boolean>>... actions) {
+    
+    List<Function<Transaction, STMAction<Boolean>>> transactionalActions = Arrays.asList(actions);
+    
+    transactionalActions.forEach(action -> {
+      Transaction.builder().stm(this).action(action).build().execute();
+    });
   }
   
   /**
