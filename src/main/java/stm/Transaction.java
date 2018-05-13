@@ -9,8 +9,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.function.Consumer;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -28,15 +29,9 @@ import lombok.Singular;
  * @author sidmishraw
  *         Qualified Name: stm.Transaction
  */
-public final class Transaction implements Runnable {
+public final class Transaction implements Callable<Optional<Quarantine>> {
   
   private static final Logger logger = LoggerFactory.getLogger(Transaction.class);
-  
-  /**
-   * The latch used for holding the invoking thread (main-thread) till this
-   * transaction is done computing.
-   */
-  private CountDownLatch latch;
   
   /**
    * Denotes the version number of the transaction. It is the number of times the
@@ -96,13 +91,6 @@ public final class Transaction implements Runnable {
   private List<Function<Transaction, Boolean>> actions;
   
   /**
-   * Introduced in the Mustash-STMv2-promised branch, this is the callback function that
-   * this transaction is going to execute after it is done processing the transactional action and
-   * committed its results to the STM.
-   */
-  private Consumer<Quarantine> callback;
-  
-  /**
    * Creates a new transaction for the given STM, list of transactional actions (disjoint), and a
    * callback function.
    * 
@@ -110,11 +98,9 @@ public final class Transaction implements Runnable {
    *          The STM object that the transaction operates upon.
    * @param actions
    *          The disjoint transactional actions.
-   * @param cb
-   *          The callback action the transaction executes after its successful commit phase.
    */
   @Builder
-  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions, Consumer<Quarantine> cb) {
+  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
     this.version = 0;
     this.isComplete = false;
     this.readQuarantine = new HashMap<>();
@@ -122,15 +108,14 @@ public final class Transaction implements Runnable {
     this.stm = stm;
     this.actions = actions;
     this.shouldAbort = false;
-    this.callback = cb;
   }
   
   /*
    * (non-Javadoc)
-   * @see java.lang.Runnable#run()
+   * @see java.util.concurrent.Callable#call()
    */
   @Override
-  public void run() {
+  public Optional<Quarantine> call() throws Exception {
     
     logger.debug("Transaction: " + Thread.currentThread().getName() + " has started execution.");
     
@@ -172,32 +157,20 @@ public final class Transaction implements Runnable {
       this.version = this.version + 1;
     }
     
-    if (!Objects.isNull(this.latch)) this.latch.countDown(); // signal the calling thread that this is done
-    
-    // Execute the callback function
+    // if the Transaction has been invalidated, there is no valid quarantine
     //
-    if (!Objects.isNull(this.callback)) this.callback.accept(new Quarantine(this.readQuarantine, this.writeQuarantine));
+    if (this.shouldAbort) return Optional.empty();
+    
+    return Optional.ofNullable(new Quarantine(this.readQuarantine, this.writeQuarantine));
   }
   
   /**
-   * Runs transaction with a latch so that the parent thread will wait for the
-   * transaction to end execution.
+   * Submits this transaction to the STM for execution.
    * 
-   * @param latch
-   *          the latch on which the parent thread will await
+   * @return The Future (promise) for the pending task.
    */
-  void go(CountDownLatch latch) {
-    this.latch = latch;
-    Thread currentThread = new Thread(this);
-    currentThread.start();
-  }
-  
-  /**
-   * Executes this transaction in a new thread.
-   */
-  void execute() {
-    Thread currentThread = new Thread(this);
-    currentThread.start();
+  Future<Optional<Quarantine>> execute() {
+    return this.stm.submit(this);
   }
   
   /**

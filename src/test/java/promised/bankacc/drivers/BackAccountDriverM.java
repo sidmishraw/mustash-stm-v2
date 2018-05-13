@@ -38,6 +38,7 @@
  */
 package promised.bankacc.drivers;
 
+import java.util.Optional;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,15 +72,15 @@ public class BackAccountDriverM {
   private static Logger logger = LoggerFactory.getLogger(BackAccountDriverM.class);
   
   /**
-   * Instantiating the STM for this application. Ideally, having 1 STM throughout the lifetime of an
-   * application should be ideal.
-   */
-  private static final STM stm = new STM();
-  
-  /**
    * @param args
    */
   public static void main(String[] args) {
+    
+    /**
+     * Instantiating the STM for this application. Ideally, having 1 STM throughout the lifetime of an
+     * application should be ideal.
+     */
+    STM stm = new STM();
     
     // Create two accounts `account1` and `account2` with initial balances
     // `100` and `200` respectively.
@@ -98,6 +99,7 @@ public class BackAccountDriverM {
     //
     ExecutorService threadPool = Executors.newFixedThreadPool(4);
     
+    // ----------------------------------------------------------------------------------
     // perform the actions on the accounts
     // deposit 50 into acc1: acc1 = 150
     // deposit 300 into acc2: acc2 = 500
@@ -108,21 +110,38 @@ public class BackAccountDriverM {
     //
     // Note: all these actions happen to be running on separate threads under the hood.
     //
-    threadPool.submit(() -> acc1.deposit(50));
-    threadPool.submit(() -> acc2.deposit(300));
-    threadPool.submit(() -> acc1.transfer(acc2, 35));
-    threadPool.submit(() -> acc2.transfer(acc1, 50));
-    
-    // Another way of getting the state out of the QSTM.
-    //
     threadPool.submit(() -> {
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-      logger.info("Acc1 stopped balance = " + acc1.getStoppedBalance().toString());
+      Optional<Integer> newBal = acc1.deposit(50);
+      logger.info("Acc#1 :: New balance after deposit = " + newBal.orElse(-1).toString());
     });
+    
+    threadPool.submit(() -> {
+      Optional<Integer> newBal = acc2.deposit(300);
+      logger.info("Acc#2 :: New balance after deposit = " + newBal.orElse(-1).toString());
+    });
+    
+    threadPool.submit(() -> {
+      Optional<Integer[]> bals = acc1.transfer(acc2, 35);
+      logger.info("------------------------------------------------------------------");
+      logger.info("Acc#1 :: After successful transfer = " + bals.get()[0].toString());
+      logger.info("Acc#2 :: After successful transfer = " + bals.get()[1].toString());
+      logger.info("------------------------------------------------------------------");
+    });
+    
+    threadPool.submit(() -> {
+      Optional<Integer[]> bals = acc2.transfer(acc1, 50);
+      logger.info("------------------------------------------------------------------");
+      logger.info("Acc#1 :: After successful transfer = " + bals.get()[0].toString());
+      logger.info("Acc#2 :: After successful transfer = " + bals.get()[1].toString());
+      logger.info("------------------------------------------------------------------");
+    });
+    //
+    // ----------------------------------------------------------------------------------
+    
+    logger.info("Account 1 balance = " + acc1.getBalance().get().toString());
+    logger.info("Account 1 balance = " + acc1.getBalance().get().toString());
+    logger.info("Account 1 balance = " + acc1.getBalance().get().toString());
+    logger.info("Account 1 balance = " + acc1.getBalance().get().toString());
     
     // shutdown the threadPool, its job is done
     //
@@ -135,13 +154,7 @@ public class BackAccountDriverM {
       sc.nextLine();
     } catch (Exception e) {}
     
-    // This is again transactional and depends on when the call is made.
-    // However, the data read is always consistent. The positioning decides the
-    // validity of the value.
-    //
-    acc1.getBalance((b) -> {
-      logger.info("The balance of account 1 = " + String.valueOf(b));
-    });
+    logger.info("Account 1 balance = " + acc1.getBalance().get().toString());
     
     // Poor man's debugging -- printing the JSON structures to check the current state
     // of the accounts.
@@ -154,6 +167,10 @@ public class BackAccountDriverM {
     // The {@link Future} is going to provide a better API when programming.
     // Asynchronous style of programming using the QSTM with guaranteed atomicity, isolation, and
     // order-specification.
+    
+    // Shutdown the STM as the work is done.l also cause the STM to clear up the resources.
+    //
+    stm.done();
   }
   
   /**

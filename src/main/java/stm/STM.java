@@ -10,8 +10,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
@@ -31,6 +34,13 @@ import com.google.gson.GsonBuilder;
 public class STM {
   
   private static final Logger logger = LoggerFactory.getLogger(STM.class);
+  
+  /**
+   * The thread-pool that is used by the STM for spawing transactions.
+   * The transactions are callables and return a quarantine instance when done executing.
+   * In this implementation, I use the CommonPool instance as the thread-pool.
+   */
+  private ExecutorService pool;
   
   /**
    * The memory cells or the Memory vector.
@@ -67,6 +77,7 @@ public class STM {
   public STM() {
     this.memory = new ArrayList<>();
     this.commitLock = new ReentrantLock();
+    this.pool = ForkJoinPool.commonPool();
   }
   
   /**
@@ -115,32 +126,29 @@ public class STM {
   }
   
   /**
+   * Submits the transaction to the STM for execution. It returns a promise that resolves to the
+   * result once the transaction executes successfully.
+   * 
+   * @param t
+   *          The transaction that is to be executed.
+   * @return The pending Future (promise) which will resolve into a Quarantine instance holding the
+   *         effects of the transaction.
+   */
+  Future<Optional<Quarantine>> submit(Transaction t) {
+    return this.pool.submit(t);
+  }
+  
+  /**
    * The STM spins up a transaction to perform the actions.
    * 
    * @param actions
    *          The actions to perform transactionally.
    */
   @SuppressWarnings("unchecked")
-  public void perform(Function<Transaction, Boolean>... actions) {
+  public Future<Optional<Quarantine>> perform(Function<Transaction, Boolean>... actions) {
     List<Function<Transaction, Boolean>> transactionalActions = Arrays.asList(actions);
     Transaction t = Transaction.builder().stm(this).actions(transactionalActions).build();
-    t.execute();
-  }
-  
-  /**
-   * The STM spins up a transaction to perform the actions.
-   * 
-   * @param cb
-   *          The callback to execute once all the operations are done executing.
-   * 
-   * @param actions
-   *          The transactional actions to perform.
-   */
-  @SuppressWarnings("unchecked")
-  public void perform(Consumer<Quarantine> cb, Function<Transaction, Boolean>... actions) {
-    List<Function<Transaction, Boolean>> transactionalActions = Arrays.asList(actions);
-    Transaction t = Transaction.builder().stm(this).actions(transactionalActions).cb(cb).build();
-    t.execute();
+    return t.execute();
   }
   
   /**
@@ -165,6 +173,14 @@ public class STM {
   }
   
   /**
+   * Makes the pool wait for Quiescence (all worker threads to idle).
+   */
+  public void done() {
+    ((ForkJoinPool) this.pool).awaitQuiescence(5, TimeUnit.SECONDS);
+    logger.info("Shutting down the pool...");
+  }
+  
+  /**
    * Prints the state of all the memory cells of the STM. To be used for debugging
    * only.
    */
@@ -176,6 +192,7 @@ public class STM {
       public boolean shouldSkipField(FieldAttributes f) {
         if (f.getName().equals("commitLock")) return true;
         if (f.getName().equals("memCellLock")) return true;
+        if (f.getName().equals("pool")) return true;
         return false;
       }
       

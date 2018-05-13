@@ -30,9 +30,8 @@
  */
 package promised.bankacc;
 
-import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.concurrent.Future;
 
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
@@ -45,7 +44,6 @@ import stm.Quarantine;
 import stm.STM;
 import stm.TVar;
 import stm.Transaction;
-import stm.Value;
 
 /**
  * The bank account is the domain object. We segregate its content into identity
@@ -106,11 +104,14 @@ public class Account {
    * 
    * @param amount
    *          The amount to be deposited into the account.
+   * @return The new balance of this account.
    */
   @SuppressWarnings("unchecked")
-  public void deposit(Integer amount) {
+  public Optional<Integer> deposit(Integer amount) {
     
-    this.stm.perform((Transaction t) -> {
+    Optional<Integer> bal = Optional.empty();
+    
+    Future<Optional<Quarantine>> fq = this.stm.perform((Transaction t) -> {
       
       AccountState as = t.read(this.accountState, AccountState.class);
       
@@ -119,6 +120,17 @@ public class Account {
       return t.write(this.accountState, as);
     });
     
+    try {
+      
+      Optional<Quarantine> q = fq.get();
+      
+      if (q.isPresent()) {
+        
+        bal = Optional.ofNullable(q.get().get(this.accountState, AccountState.class).get().getBalance());
+      }
+    } catch (Exception e) {}
+    
+    return bal;
   }
   
   /**
@@ -126,11 +138,14 @@ public class Account {
    * 
    * @param amount
    *          The amount to be withdrawn from the account.
+   * @return The new balance of this account.
    */
   @SuppressWarnings("unchecked")
-  public void withdraw(Integer amount) {
+  public Optional<Integer> withdraw(Integer amount) {
     
-    this.stm.perform((Transaction t) -> {
+    Optional<Integer> bal = Optional.empty();
+    
+    Future<Optional<Quarantine>> fq = this.stm.perform((Transaction t) -> {
       
       AccountState as = t.read(this.accountState, AccountState.class);
       
@@ -147,6 +162,17 @@ public class Account {
       }
     });
     
+    try {
+      
+      Optional<Quarantine> q = fq.get();
+      
+      if (q.isPresent()) {
+        
+        bal = Optional.ofNullable(q.get().get(this.accountState, AccountState.class).get().getBalance());
+      }
+    } catch (Exception e) {}
+    
+    return bal;
   }
   
   /**
@@ -158,9 +184,11 @@ public class Account {
    *          The amount to transfer.
    */
   @SuppressWarnings("unchecked")
-  public void transfer(Account destination, Integer amt) {
+  public Optional<Integer[]> transfer(Account destination, Integer amt) {
     
-    this.stm.perform((Transaction t) -> {
+    Optional<Integer[]> bals = Optional.empty();
+    
+    Future<Optional<Quarantine>> fq = this.stm.perform((Transaction t) -> {
       
       AccountState srcState = t.read(this.accountState, AccountState.class);
       AccountState destState = t.read(destination.accountState, AccountState.class);
@@ -183,6 +211,18 @@ public class Account {
       
     });
     
+    try {
+      
+      Optional<Quarantine> q = fq.get();
+      
+      if (q.isPresent()) {
+        bals = Optional.ofNullable(new Integer[2]);
+        bals.get()[0] = q.get().get(this.accountState, AccountState.class).get().getBalance();
+        bals.get()[1] = q.get().get(destination.accountState, AccountState.class).get().getBalance();
+      }
+    } catch (Exception e) {}
+    
+    return bals;
   }
   
   /**
@@ -192,30 +232,19 @@ public class Account {
    *          The callback to execute after getting the balance from the QSTM.
    */
   @SuppressWarnings("unchecked")
-  public void getBalance(Consumer<Integer> callback) {
-    if (Objects.isNull(callback)) return;
-    this.stm.perform((Quarantine q) -> {
-      Optional<AccountState> oState = q.get(this.accountState, AccountState.class);
-      if (oState.isPresent()) {
-        callback.accept(oState.get().getBalance());
-      }
-    }, (Transaction t) -> {
+  public Optional<Integer> getBalance() {
+    Optional<Integer> bal = Optional.empty();
+    Future<Optional<Quarantine>> fq = this.stm.perform((Transaction t) -> {
       t.read(this.accountState, AccountState.class);
       return true;
     });
-  }
-  
-  /**
-   * Gets the balance of the account by stopping the QSTM for a brief moment and reading its
-   * contents.
-   * 
-   * @return The balance of this account at the point of invocation. Might block for some time since
-   *         it needs to stop the world to view the current state.
-   */
-  public Integer getStoppedBalance() {
-    Optional<Value> oState = this.stm.viewState(this.accountState);
-    if (oState.isPresent()) return ((AccountState) oState.get()).getBalance();
-    return null;
+    try {
+      Optional<Quarantine> q = fq.get();
+      if (q.isPresent()) {
+        bal = Optional.ofNullable(q.get().get(this.accountState, AccountState.class).get().getBalance());
+      }
+    } catch (Exception e) {}
+    return bal;
   }
   
   /**
