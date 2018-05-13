@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -95,13 +96,25 @@ public final class Transaction implements Runnable {
   private List<Function<Transaction, Boolean>> actions;
   
   /**
-   * Creates a new transaction for the given STM.
+   * Introduced in the Mustash-STMv2-promised branch, this is the callback function that
+   * this transaction is going to execute after it is done processing the transactional action and
+   * committed its results to the STM.
+   */
+  private Consumer<Quarantine> callback;
+  
+  /**
+   * Creates a new transaction for the given STM, list of transactional actions (disjoint), and a
+   * callback function.
    * 
    * @param stm
-   *          The STM object that the transaction operates on.
+   *          The STM object that the transaction operates upon.
+   * @param actions
+   *          The disjoint transactional actions.
+   * @param cb
+   *          The callback action the transaction executes after its successful commit phase.
    */
   @Builder
-  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions) {
+  Transaction(STM stm, @Singular List<Function<Transaction, Boolean>> actions, Consumer<Quarantine> cb) {
     this.version = 0;
     this.isComplete = false;
     this.readQuarantine = new HashMap<>();
@@ -109,6 +122,7 @@ public final class Transaction implements Runnable {
     this.stm = stm;
     this.actions = actions;
     this.shouldAbort = false;
+    this.callback = cb;
   }
   
   /*
@@ -159,6 +173,10 @@ public final class Transaction implements Runnable {
     }
     
     if (!Objects.isNull(this.latch)) this.latch.countDown(); // signal the calling thread that this is done
+    
+    // Execute the callback function
+    //
+    if (!Objects.isNull(this.callback)) this.callback.accept(new Quarantine(this.readQuarantine, this.writeQuarantine));
   }
   
   /**

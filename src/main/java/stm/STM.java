@@ -9,7 +9,9 @@ package stm;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
@@ -123,6 +125,43 @@ public class STM {
     List<Function<Transaction, Boolean>> transactionalActions = Arrays.asList(actions);
     Transaction t = Transaction.builder().stm(this).actions(transactionalActions).build();
     t.execute();
+  }
+  
+  /**
+   * The STM spins up a transaction to perform the actions.
+   * 
+   * @param cb
+   *          The callback to execute once all the operations are done executing.
+   * 
+   * @param actions
+   *          The transactional actions to perform.
+   */
+  @SuppressWarnings("unchecked")
+  public void perform(Consumer<Quarantine> cb, Function<Transaction, Boolean>... actions) {
+    List<Function<Transaction, Boolean>> transactionalActions = Arrays.asList(actions);
+    Transaction t = Transaction.builder().stm(this).actions(transactionalActions).cb(cb).build();
+    t.execute();
+  }
+  
+  /**
+   * Provides a view of the state of the transactional variable. This is a stop the world kind of
+   * solution.
+   * 
+   * @param tvar
+   *          The transactional variable whose value you need to view.
+   * @return An optional copy of the state of the transactional variable at the time of invocation.
+   */
+  public Optional<Value> viewState(TVar tvar) {
+    Optional<Value> val = Optional.empty();
+    try {
+      this.acquireCommitLock();
+      val = Optional.ofNullable(((MemoryCell) tvar).read().makeCopy());
+    } catch (Exception e) {
+      logger.error(e.getMessage(), e);
+    } finally {
+      this.releaseCommitLock();
+    }
+    return val;
   }
   
   /**
